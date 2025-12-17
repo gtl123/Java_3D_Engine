@@ -17,36 +17,46 @@ import java.util.Scanner;
 public class Utils {
 
     public static String loadResource(String fileName) throws Exception {
-        String result;
-        try (InputStream in = Utils.class.getResourceAsStream(fileName);
-                Scanner scanner = new Scanner(in, StandardCharsets.UTF_8.name())) {
-            result = scanner.useDelimiter("\\A").next();
+        InputStream in = Utils.class.getResourceAsStream("/" + fileName);
+
+        if (in == null) {
+            throw new RuntimeException("RESOURCE NOT FOUND: " + fileName);
         }
-        return result;
+
+        try (Scanner scanner = new Scanner(in, StandardCharsets.UTF_8)) {
+            return scanner.useDelimiter("\\A").next();
+        }
     }
+
 
     public static ByteBuffer ioResourceToByteBuffer(String resource, int bufferSize) throws IOException {
         ByteBuffer buffer;
 
+        // 1️⃣ Try filesystem first (optional)
         Path path = Paths.get(resource);
         if (Files.isReadable(path)) {
             try (SeekableByteChannel fc = Files.newByteChannel(path)) {
                 buffer = BufferUtils.createByteBuffer((int) fc.size() + 1);
                 while (fc.read(buffer) != -1) {
-                    ;
+                    // read
                 }
             }
         } else {
-            try (InputStream source = Utils.class.getResourceAsStream(resource);
-                    ReadableByteChannel rbc = Channels.newChannel(source)) {
+            // 2️⃣ Load from classpath SAFELY
+            InputStream source = Utils.class.getResourceAsStream("/" + resource);
+
+            if (source == null) {
+                throw new RuntimeException("RESOURCE NOT FOUND: " + resource);
+            }
+
+            try (ReadableByteChannel rbc = Channels.newChannel(source)) {
                 buffer = BufferUtils.createByteBuffer(bufferSize);
 
                 while (true) {
                     int bytes = rbc.read(buffer);
-                    if (bytes == -1) {
-                        break;
-                    }
-                    if (buffer.remaining() == 0) {
+                    if (bytes == -1) break;
+
+                    if (!buffer.hasRemaining()) {
                         buffer = resizeBuffer(buffer, buffer.capacity() * 2);
                     }
                 }
@@ -56,6 +66,9 @@ public class Utils {
         buffer.flip();
         return buffer;
     }
+
+
+
 
     private static ByteBuffer resizeBuffer(ByteBuffer buffer, int newCapacity) {
         ByteBuffer newBuffer = BufferUtils.createByteBuffer(newCapacity);

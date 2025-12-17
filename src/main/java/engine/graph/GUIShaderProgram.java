@@ -7,11 +7,12 @@ public class GUIShaderProgram extends ShaderProgram {
 
     public GUIShaderProgram() throws Exception {
         super();
-        createVertexShader(engine.utils.Utils.loadResource("/shaders/hud_vertex.vs"));
-        createFragmentShader(engine.utils.Utils.loadResource("/shaders/hud_fragment.fs"));
+        createVertexShader(engine.utils.Utils.loadResource("shaders/hud_vertex.vs"));
+        createFragmentShader(engine.utils.Utils.loadResource("shaders/hud_fragment.fs"));
         link();
 
-        createUniform("projModelMatrix");
+        createUniform("projectionMatrix");
+        createUniform("modelMatrix");
         createUniform("colour");
         createUniform("hasTexture");
         createUniform("texture_sampler");

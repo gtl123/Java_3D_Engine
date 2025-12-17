@@ -2,6 +2,7 @@ package engine.graph;
 
 import org.lwjgl.system.MemoryStack;
 
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 
@@ -40,6 +41,7 @@ public class Texture {
     }
 
     private static int loadTexture(String fileName) throws Exception {
+
         int width;
         int height;
         ByteBuffer buf;

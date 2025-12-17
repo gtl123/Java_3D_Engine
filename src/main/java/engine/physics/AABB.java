@@ -26,4 +26,26 @@ public class AABB {
         min.add(x, y, z);
         max.add(x, y, z);
     }
+    public Vector3f getCenter() {
+        return new Vector3f(
+                (min.x + max.x) * 0.5f,
+                (min.y + max.y) * 0.5f,
+                (min.z + max.z) * 0.5f
+        );
+    }
+
+    public Vector3f getHalfExtents() {
+        return new Vector3f(
+                (max.x - min.x) * 0.5f,
+                (max.y - min.y) * 0.5f,
+                (max.z - min.z) * 0.5f
+        );
+    }
+
+    public void setPosition(Vector3f pos) {
+        Vector3f half = getHalfExtents();
+        min.set(pos.x - half.x, pos.y - half.y, pos.z - half.z);
+        max.set(pos.x + half.x, pos.y + half.y, pos.z + half.z);
+    }
+
 }

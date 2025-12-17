@@ -19,7 +19,7 @@ public class ChunkManager {
     public ChunkManager() throws Exception {
         this.chunks = new ConcurrentHashMap<>();
         this.executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-        this.texture = new Texture("/textures/terrain.png");
+        this.texture = new Texture("textures/terrain.png");
     }
 
     public void init() {
@@ -30,6 +30,16 @@ public class ChunkManager {
     }
 
     public void render(Renderer renderer, Window window) {
+    }
+
+    public int getTotalVertices() {
+        int total = 0;
+        for (Chunk c : chunks.values()) {
+            if (c.getMesh() != null) {
+                total += c.getMesh().getVertexCount();
+            }
+        }
+        return total;
     }
 
     public void loadChunksAround(int centerX, int centerZ, int radius) {
@@ -115,4 +125,45 @@ public class ChunkManager {
             c.cleanup();
         }
     }
+    public boolean isSolidBlock(int worldX, int worldY, int worldZ) {
+        if (worldY < 0 || worldY >= Chunk.SIZE_Y) return false;
+
+        int chunkX = worldX >> 4;
+        int chunkZ = worldZ >> 4;
+        String key = getChunkKey(chunkX, chunkZ);
+        Chunk chunk = chunks.get(key);
+        if (chunk == null) return false;
+
+        int localX = worldX & 15;
+        int localZ = worldZ & 15;
+
+        Block block = chunk.getBlock(localX, worldY, localZ);
+        return block != null && block.isSolid();
+    }
+
+    public int getGroundHeight(int worldX, int worldZ) {
+        int chunkX = worldX >> 4; // divide by 16
+        int chunkZ = worldZ >> 4;
+        String key = getChunkKey(chunkX, chunkZ);
+        Chunk chunk = chunks.get(key);
+        if (chunk == null) {
+            return 0; // chunk not loaded, default to 0
+        }
+
+        int localX = worldX & 15; // modulo 16
+        int localZ = worldZ & 15;
+
+        // Scan from top of chunk downwards
+        for (int y = Chunk.SIZE_Y - 1; y >= 0; y--) {
+            Block block = chunk.getBlock(localX, y, localZ);
+            if (block != null && block.isSolid()) {
+                return y + 1; // return the surface height (just above the solid block)
+            }
+        }
+
+        return 0; // no solid block found, treat as void
+    }
+
+
+
 }

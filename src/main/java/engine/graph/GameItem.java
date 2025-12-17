@@ -1,52 +1,74 @@
 package engine.graph;
 
+import org.joml.Matrix4f;
 import org.joml.Vector3f;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class GameItem {
 
-    private Mesh mesh; // Removed final
+    private Mesh mesh;
 
-    private final Vector3f position;
+    // Local transform (relative to parent)
+    private final Vector3f localPosition;
+    private final Vector3f localRotation;
+    private float localScale;
 
-    private float scale;
-
-    private final Vector3f rotation;
+    // Parent/children
+    private GameItem parent;
+    private final List<GameItem> children;
 
     public GameItem(Mesh mesh) {
         this.mesh = mesh;
-        position = new Vector3f(0, 0, 0);
-        scale = 1;
-        rotation = new Vector3f(0, 0, 0);
+        this.localPosition = new Vector3f(0, 0, 0);
+        this.localRotation = new Vector3f(0, 0, 0);
+        this.localScale = 1f;
+        this.children = new ArrayList<>();
     }
 
-    public Vector3f getPosition() {
-        return position;
+    // --- Parent/child management ---
+    public void addChild(GameItem child, Vector3f offset) {
+        child.parent = this;
+        child.localPosition.set(offset);
+        children.add(child);
     }
 
-    public void setPosition(float x, float y, float z) {
-        this.position.x = x;
-        this.position.y = y;
-        this.position.z = z;
+    public List<GameItem> getChildren() {
+        return children;
     }
 
-    public float getScale() {
-        return scale;
+    public GameItem getParent() {
+        return parent;
     }
 
-    public void setScale(float scale) {
-        this.scale = scale;
+    // --- Local transform setters ---
+    public void setLocalPosition(float x, float y, float z) {
+        this.localPosition.set(x, y, z);
     }
 
-    public Vector3f getRotation() {
-        return rotation;
+    public void setLocalRotation(float x, float y, float z) {
+        this.localRotation.set(x, y, z);
     }
 
-    public void setRotation(float x, float y, float z) {
-        this.rotation.x = x;
-        this.rotation.y = y;
-        this.rotation.z = z;
+    public void setLocalScale(float scale) {
+        this.localScale = scale;
     }
 
+    // --- World transform calculation ---
+    public Matrix4f getWorldTransform() {
+        Matrix4f transform = new Matrix4f()
+                .translate(localPosition)
+                .rotateXYZ(localRotation.x, localRotation.y, localRotation.z)
+                .scale(localScale);
+
+        if (parent != null) {
+            return new Matrix4f(parent.getWorldTransform()).mul(transform);
+        }
+        return transform;
+    }
+
+    // --- Mesh access ---
     public Mesh getMesh() {
         return mesh;
     }
