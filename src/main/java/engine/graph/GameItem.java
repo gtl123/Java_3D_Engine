@@ -34,6 +34,12 @@ public class GameItem {
         children.add(child);
     }
 
+    public void removeChild(GameItem child) {
+        if (children.remove(child)) {
+            child.parent = null;
+        }
+    }
+
     public List<GameItem> getChildren() {
         return children;
     }

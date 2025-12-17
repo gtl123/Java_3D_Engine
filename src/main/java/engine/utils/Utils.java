@@ -28,11 +28,10 @@ public class Utils {
         }
     }
 
-
     public static ByteBuffer ioResourceToByteBuffer(String resource, int bufferSize) throws IOException {
         ByteBuffer buffer;
 
-        // 1️⃣ Try filesystem first (optional)
+        // Try filesystem first (optional)
         Path path = Paths.get(resource);
         if (Files.isReadable(path)) {
             try (SeekableByteChannel fc = Files.newByteChannel(path)) {
@@ -42,7 +41,7 @@ public class Utils {
                 }
             }
         } else {
-            // 2️⃣ Load from classpath SAFELY
+            // Load from classpath SAFELY
             InputStream source = Utils.class.getResourceAsStream("/" + resource);
 
             if (source == null) {
@@ -54,7 +53,8 @@ public class Utils {
 
                 while (true) {
                     int bytes = rbc.read(buffer);
-                    if (bytes == -1) break;
+                    if (bytes == -1)
+                        break;
 
                     if (!buffer.hasRemaining()) {
                         buffer = resizeBuffer(buffer, buffer.capacity() * 2);
@@ -66,9 +66,6 @@ public class Utils {
         buffer.flip();
         return buffer;
     }
-
-
-
 
     private static ByteBuffer resizeBuffer(ByteBuffer buffer, int newCapacity) {
         ByteBuffer newBuffer = BufferUtils.createByteBuffer(newCapacity);

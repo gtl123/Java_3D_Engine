@@ -85,9 +85,8 @@ public class HUD {
         for (int i = 0; i < maxHearts; i++) {
             GameItem heart = new GameItem(quadMesh);
             heart.setLocalScale(32f);
-            heart.setLocalPosition(20 + i * 40, 40, 0);
             heart.getMesh().setTexture(heartFull);
-            hudRoot.addChild(heart, new Vector3f(0, 0, 0));
+            hudRoot.addChild(heart, new Vector3f(20 + i * 40, 40, 0));
             hearts.add(heart);
         }
     }
@@ -98,9 +97,8 @@ public class HUD {
         for (int i = 0; i < maxHunger; i++) {
             GameItem icon = new GameItem(quadMesh);
             icon.setLocalScale(32f);
-            icon.setLocalPosition(20 + i * 40, 80, 0);
             icon.getMesh().setTexture(hungerFull);
-            hudRoot.addChild(icon, new Vector3f(0, 0, 0));
+            hudRoot.addChild(icon, new Vector3f(20 + i * 40, 80, 0));
             hungerIcons.add(icon);
         }
     }
@@ -111,9 +109,8 @@ public class HUD {
         for (int i = 0; i < maxWater; i++) {
             GameItem icon = new GameItem(quadMesh);
             icon.setLocalScale(32f);
-            icon.setLocalPosition(20 + i * 40, 120, 0);
             icon.getMesh().setTexture(waterFull);
-            hudRoot.addChild(icon, new Vector3f(0, 0, 0));
+            hudRoot.addChild(icon, new Vector3f(20 + i * 40, 120, 0));
             waterIcons.add(icon);
         }
     }
@@ -127,6 +124,7 @@ public class HUD {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
 
         Matrix4f ortho = new Matrix4f().ortho2D(
                 0, window.getWidth(),
@@ -142,6 +140,7 @@ public class HUD {
         renderStatsOverlay(window);
 
         glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
         glDisable(GL_BLEND);
         shaderProgram.unbind();
     }

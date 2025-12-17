@@ -14,26 +14,27 @@ uniform int useColour;
 uniform vec3 lightDirection;
 uniform vec3 lightColor;
 uniform float ambientStrength;
+uniform float uAlpha; // NEW
+
+uniform float uBreakProgress; // 0 to 1
 
 void main()
 {
     vec4 textureColor;
+    // Generic UV calculation for all branches
+    vec3 absNormal = abs(worldNormal);
+    vec2 uv;
+    if (absNormal.x > 0.5) {
+        uv = worldPos.zy;
+    } else if (absNormal.y > 0.5) {
+        uv = worldPos.xz;
+    } else {
+        uv = worldPos.xy;
+    }
+
     if ( useColour == 1 ) {
         fragColor = vec4(colour, 1.0);
     } else {
-        // Texture tiling based on world position
-        vec3 absNormal = abs(worldNormal);
-        vec2 uv;
-        
-        // Determine which plane the face is on
-        if (absNormal.x > 0.5) {
-            uv = worldPos.zy;  // X-facing face
-        } else if (absNormal.y > 0.5) {
-            uv = worldPos.xz;  // Y-facing face
-        } else {
-            uv = worldPos.xy;  // Z-facing face
-        }
-        
         // Tile the UVs (fract gives us 0-1 per block)
         vec2 tiledUV = fract(uv);
         
@@ -55,5 +56,29 @@ void main()
         vec3 lighting = ambient + diffuse;
         
         fragColor = textureColor * vec4(lighting, 1.0);
+    }
+
+    // Apply Breaking Cracks Overlay - applies to both textures and solid colors
+    if (uBreakProgress > 0.05) {
+        vec2 localUV = fract(uv);
+        float crack = 0.0;
+        
+        // Draw larger, more obvious "shattering" lines
+        float density = 3.0 + uBreakProgress * 12.0;
+        float line1 = abs(sin((localUV.x + localUV.y) * density));
+        float line2 = abs(sin((localUV.x - localUV.y) * density));
+        
+        float threshold = 0.98 - uBreakProgress * 0.4;
+        if (line1 > threshold || line2 > threshold) {
+            crack = 0.7 + uBreakProgress * 0.3; // Very dark cracks
+        }
+        
+        // Darken/Damage the color
+        fragColor.rgb *= (1.0 - crack);
+    }
+
+    // Apply global alpha
+    if (uAlpha > 0.0) {
+        fragColor.a *= uAlpha;
     }
 }

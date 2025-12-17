@@ -43,6 +43,9 @@ public class Renderer {
     private int skyDomeEBO = 0;
     private int skyDomeIndexCount = 0;
 
+    // Selection highlight
+    private Mesh selectionMesh;
+
     public Renderer() {
         transformation = new Transformation();
     }
@@ -56,9 +59,65 @@ public class Renderer {
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
 
+        // Selection mesh: a slightly larger cube (1.002f)
+        selectionMesh = CubeMeshBuilder.createCube(1.002f, 1.002f, 1.002f);
+
         // Build sky dome mesh once (segments: slices x stacks, radius large enough to
         // cover far plane)
         buildSkyDome(32, 16, 100.0f);
+    }
+
+    public void renderSelection(Window window, Camera camera, org.joml.Vector3f pos, float progress,
+            float maxHardness) {
+        if (pos == null)
+            return;
+
+        shaderProgram.bind();
+
+        Matrix4f projectionMatrix = transformation.getProjectionMatrix(FOV, window.getWidth(), window.getHeight(),
+                Z_NEAR, Z_FAR);
+        shaderProgram.setUniform("projectionMatrix", projectionMatrix);
+
+        Matrix4f viewMatrix = transformation.getViewMatrix(camera);
+        Matrix4f modelMatrix = new Matrix4f().translate(pos.x + 0.5f, pos.y + 0.5f, pos.z + 0.5f);
+        Matrix4f modelViewMatrix = new Matrix4f(viewMatrix).mul(modelMatrix);
+
+        shaderProgram.setUniform("modelViewMatrix", modelViewMatrix);
+        shaderProgram.setUniform("useColour", 1);
+        shaderProgram.setUniform("texture_sampler", 0);
+
+        // Pass breaking progress to the shader for procedural cracks
+        float progressRatio = progress / Math.max(0.1f, maxHardness);
+        shaderProgram.setUniform("uBreakProgress", progressRatio);
+
+        // Render Semi-transparent fill
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_CULL_FACE);
+
+        // Alpha calculation
+        float alphaValue = 0.2f + progressRatio * 0.4f;
+        shaderProgram.setUniform("colour", new org.joml.Vector3f(1.0f, 1.0f, 1.0f));
+        shaderProgram.setUniform("uAlpha", alphaValue);
+
+        // --- Pass 1: Semi-transparent Fill ---
+        selectionMesh.render();
+
+        // --- Pass 2: Wireframe ---
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glLineWidth(2.0f);
+        shaderProgram.setUniform("colour", new org.joml.Vector3f(0.0f, 0.0f, 0.0f)); // black outline
+        shaderProgram.setUniform("uAlpha", 1.0f); // Wireframe is opaque
+        selectionMesh.render();
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+        glDisable(GL_BLEND);
+        glEnable(GL_CULL_FACE);
+        shaderProgram.unbind();
+    }
+
+    public Mesh getSelectionMesh() {
+        return selectionMesh;
     }
 
     public int getSceneFBO() {
@@ -89,6 +148,8 @@ public class Renderer {
         shaderProgram.createUniform("lightDirection");
         shaderProgram.createUniform("lightColor");
         shaderProgram.createUniform("ambientStrength");
+        shaderProgram.createUniform("uBreakProgress");
+        shaderProgram.createUniform("uAlpha");
     }
 
     private void setupInstancedShader() throws Exception {
@@ -103,6 +164,8 @@ public class Renderer {
         instancedShaderProgram.createUniform("colour");
         instancedShaderProgram.createUniform("useColour");
         instancedShaderProgram.createUniform("isInstanced");
+        instancedShaderProgram.createUniform("uAlpha");
+        instancedShaderProgram.createUniform("uBreakProgress");
     }
 
     private void initSceneTarget(int width, int height) {
@@ -173,6 +236,8 @@ public class Renderer {
                 FOV, sceneWidth, sceneHeight, Z_NEAR, Z_FAR);
         shaderProgram.setUniform("projectionMatrix", projectionMatrix);
         shaderProgram.setUniform("texture_sampler", 0);
+        shaderProgram.setUniform("uBreakProgress", 0.0f);
+        shaderProgram.setUniform("uAlpha", 1.0f);
 
         Matrix4f viewMatrix = transformation.getViewMatrix(camera);
 
@@ -237,6 +302,8 @@ public class Renderer {
 
         // Sampler binding for meshes
         shaderProgram.setUniform("texture_sampler", 0);
+        shaderProgram.setUniform("uBreakProgress", 0.0f);
+        shaderProgram.setUniform("uAlpha", 1.0f);
 
         for (engine.voxel.Chunk chunk : chunks) {
             Mesh mesh = chunk.getMesh();
@@ -281,6 +348,8 @@ public class Renderer {
 
         // Ensure sampler is set
         shaderProgram.setUniform("texture_sampler", 0);
+        shaderProgram.setUniform("uBreakProgress", 0.0f);
+        shaderProgram.setUniform("uAlpha", 1.0f);
 
         for (engine.voxel.Chunk chunk : chunks) {
             Mesh mesh = chunk.getMesh();
