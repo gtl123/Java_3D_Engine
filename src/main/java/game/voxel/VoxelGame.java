@@ -1,21 +1,26 @@
 package game.voxel;
 
 import engine.IGameLogic;
-import engine.graph.*;
+import engine.entity.Entity;
+import engine.camera.*;
+import engine.shaders.SkyDomeShader;
+import engine.raster.Renderer;
+import engine.raster.Transformation;
 import engine.io.Input;
 import engine.io.MousePicker;
 import engine.io.Window;
 import engine.physics.AABB;
-import engine.voxel.Block;
-import engine.voxel.Chunk;
-import engine.voxel.ChunkManager;
-import engine.world.TimeSystem;
+import game.voxel.world.TimeSystem;
 import game.voxel.entity.PlayerController;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import game.voxel.entity.ItemEntity;
 
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11C.*;
@@ -39,13 +44,26 @@ public class VoxelGame implements IGameLogic {
     private static final float NEAR_PLANE = 0.01f;
     private static final float FAR_PLANE = 1000.0f;
 
-    private static final float PLANET_RADIUS = 6_371_000.0f;
+    private static final float PLANET_RADIUS = 600_371_000.0f;
 
     private boolean mouseLocked = false;
 
     private PlayerController player;
+    private List<ItemEntity> itemEntities = new ArrayList<>();
+    private float dropCooldown = 0.0f;
 
-    public VoxelGame() {
+    // World identity/state for saving
+    private final String worldName;
+    private final long seed;
+    private boolean saveRequested = false;
+
+    // FPS tracking
+    private float fpsSmoothed = 60.0f;
+    private static final float FPS_SMOOTH_FACTOR = 0.95f;
+
+    public VoxelGame(String worldName, long seed) {
+        this.worldName = worldName;
+        this.seed = seed;
         renderer = new Renderer();
         transformation = new Transformation();
     }
@@ -56,7 +74,7 @@ public class VoxelGame implements IGameLogic {
         renderer.init(window);
 
         player = new PlayerController(new Camera());
-        chunkManager = new ChunkManager();
+        chunkManager = new ChunkManager(seed);
         chunkManager.init();
 
         timeSystem = new TimeSystem();
@@ -69,7 +87,10 @@ public class VoxelGame implements IGameLogic {
         hud.init(window);
 
         // Initial HUD stats
-        hud.setStats(chunkManager.getChunks().size(), chunkManager.getTotalVertices());
+        int initialRendered = (int) chunkManager.getChunks().values().stream()
+                .filter(c -> c.getMesh() != null)
+                .count();
+        hud.setStats(initialRendered, chunkManager.getChunks().size(), chunkManager.getTotalVertices());
 
         // Initial HUD player state
         hud.setPlayerHealth(player.getHealth());
@@ -96,6 +117,11 @@ public class VoxelGame implements IGameLogic {
 
     @Override
     public void input(Window window, Input input) {
+        // Quick-save current world (F5)
+        if (input.isKeyPressed(GLFW_KEY_F5)) {
+            saveRequested = true;
+        }
+
         // Cursor lock toggle
         if (input.isKeyPressed(GLFW_KEY_ESCAPE)) {
             mouseLocked = false;
@@ -194,42 +220,62 @@ public class VoxelGame implements IGameLogic {
                 }
             }
         }
+
+        // Drop item
+        if (dropCooldown <= 0 && input.isKeyPressed(GLFW_KEY_G)) {
+            Block selected = inventory.getSelectedBlock();
+            if (selected != Block.AIR) {
+                Vector3f pos = player.getCamera().getEyePosition();
+                float yaw = (float) Math.toRadians(player.getCamera().getRotation().y);
+                float pitch = (float) Math.toRadians(player.getCamera().getRotation().x);
+                Vector3f dir = new Vector3f(
+                        (float) (Math.sin(yaw) * Math.cos(pitch)),
+                        (float) (-Math.sin(pitch)),
+                        (float) (-Math.cos(yaw) * Math.cos(pitch)));
+                Vector3f vel = new Vector3f(dir).mul(5.0f).add(0, 2.0f, 0);
+
+                ItemEntity dropped = new ItemEntity(selected, pos, vel);
+                // Reuse the same terrain atlas as the world blocks for a consistent look
+                if (dropped.getGameItem().getMesh() != null && chunkManager.getBlockTexture() != null) {
+                    dropped.getGameItem().getMesh().setTexture(chunkManager.getBlockTexture());
+                }
+                itemEntities.add(dropped);
+                inventory.removeItem(inventory.getSelectedSlot());
+                dropCooldown = 0.3f;
+            }
+        }
     }
 
     private Block getBlockAt(int x, int y, int z) {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        String key = ChunkManager.getChunkKey(cx, cz);
-        Chunk c = chunkManager.getChunks().get(key);
-        if (c != null) {
-            return c.getBlock(x & 15, y, z & 15);
-        }
-        return Block.AIR;
+        return chunkManager.getBlockAt(x, y, z);
     }
 
     private void setBlock(int x, int y, int z, Block block) {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        String key = ChunkManager.getChunkKey(cx, cz);
-        Chunk c = chunkManager.getChunks().get(key);
-        if (c != null) {
-            int lx = x & 15;
-            int lz = z & 15;
-            c.setBlock(lx, y, lz, block);
-        }
+        chunkManager.setBlockAt(x, y, z, block);
     }
 
     @Override
     public void update(float interval, Input input) {
 
+        int px = (int) Math.floor(player.getPosition().x / 16.0);
+        int pz = (int) Math.floor(player.getPosition().z / 16.0);
+
+        // Update block physics (falling blocks, water flow, etc)
+        chunkManager.update(interval, px, pz);
+
+        // Update chunk meshes
         chunkManager.updateMeshes();
 
-        // FPS
-        int fps = (int) (1.0f / interval);
-        hud.setFPS(fps);
+        // FPS - smooth using exponential moving average
+        float instantFps = 1.0f / interval;
+        fpsSmoothed = fpsSmoothed * FPS_SMOOTH_FACTOR + instantFps * (1.0f - FPS_SMOOTH_FACTOR);
+        hud.setFPS((int) fpsSmoothed);
 
-        // World stats
-        hud.setStats(chunkManager.getChunks().size(), chunkManager.getTotalVertices());
+        // World stats - count rendered chunks (those with meshes)
+        int renderedChunks = (int) chunkManager.getChunks().values().stream()
+                .filter(c -> c.getMesh() != null)
+                .count();
+        hud.setStats(renderedChunks, chunkManager.getChunks().size(), chunkManager.getTotalVertices());
 
         // Player state
         hud.setPlayerHealth(player.getHealth()); // hearts
@@ -258,12 +304,44 @@ public class VoxelGame implements IGameLogic {
         // Update HUD
         hud.setPlayerYaw(player.getViewRotation().y);
 
-        // Infinite world loading based on player position
-        int px = (int) player.getPosition().x / 16;
-        int pz = (int) player.getPosition().z / 16;
         chunkManager.loadChunksAround(px, pz, 6);
 
         timeSystem.update(interval);
+
+        // Persist if requested
+        if (saveRequested) {
+            try {
+                game.voxel.WorldSave.save(
+                        worldName,
+                        seed,
+                        timeSystem.getTimeOfDay(),
+                        timeSystem.getDayOfYear(),
+                        chunkManager.getChangedBlocks());
+                System.out.println("World saved: " + worldName);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            saveRequested = false;
+        }
+
+        if (dropCooldown > 0)
+            dropCooldown -= interval;
+
+        // Update item entities and pickups
+        Iterator<ItemEntity> it = itemEntities.iterator();
+        while (it.hasNext()) {
+            ItemEntity item = it.next();
+            item.update(interval, chunkManager);
+
+            // Pickup logic
+            float dist = item.getPosition().distance(player.getCamera().getPosition());
+            if (dist < 1.5f) {
+                if (inventory.addItem(item.getBlock())) {
+                    item.getGameItem().getMesh().cleanup();
+                    it.remove();
+                }
+            }
+        }
     }
 
     @Override
@@ -292,11 +370,11 @@ public class VoxelGame implements IGameLogic {
         skyShader.setUniform("uCameraPos", player.getCamera().getPosition());
         skyShader.setUniform("uCameraHeight", player.getCamera().getPosition().y);
         skyShader.setUniform("uSunDir", timeSystem.getSunDirection());
-        skyShader.setUniform("uSunIntensity", 30.0f);
+        skyShader.setUniform("uSunIntensity", 1.0f);
         skyShader.setUniform("uMieG", 0.78f);
         skyShader.setUniform("uTurbidity", 3.0f);
         skyShader.setUniform("uPlanetRadius", PLANET_RADIUS);
-        skyShader.setUniform("uAtmosphereTop", 80_000.0f);
+        skyShader.setUniform("uAtmosphereTop", 800_000.0f);
         skyShader.setUniform("uUp", new Vector3f(0, 1, 0));
 
         glActiveTexture(GL_TEXTURE0);
@@ -329,6 +407,13 @@ public class VoxelGame implements IGameLogic {
             renderer.renderSelection(window, player.getCamera(), selectedBlock, breakProgress, hardness);
         }
 
+        // --- Pass 4.5: Items ---
+        List<Entity> itemsToRender = new ArrayList<>();
+        for (ItemEntity ie : itemEntities) {
+            itemsToRender.add(ie.getGameItem());
+        }
+        renderer.renderGameItems(itemsToRender, player.getCamera(), transformation);
+
         // --- Pass 5: HUD ---
         hud.render(window);
     }
@@ -342,12 +427,19 @@ public class VoxelGame implements IGameLogic {
         if (skyShader != null)
             skyShader.cleanup();
         if (player != null) {
-            for (GameItem part : player.getAllParts()) {
-                part.getMesh().cleanup();
+            for (Entity part : player.getAllParts()) {
+                if (part != null && part.getMesh() != null) {
+                    part.getMesh().cleanup();
+                }
             }
         }
         if (chunkManager != null) {
             chunkManager.cleanup();
+        }
+        for (ItemEntity ie : itemEntities) {
+            if (ie.getGameItem().getMesh() != null) {
+                ie.getGameItem().getMesh().cleanup();
+            }
         }
     }
 

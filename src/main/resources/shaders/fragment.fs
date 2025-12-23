@@ -14,7 +14,8 @@ uniform int useColour;
 uniform vec3 lightDirection;
 uniform vec3 lightColor;
 uniform float ambientStrength;
-uniform float uAlpha; // NEW
+uniform float uAlpha;
+uniform int uRenderPass; // 0: Opaque, 1: Transparent
 
 uniform float uBreakProgress; // 0 to 1
 
@@ -43,7 +44,26 @@ void main()
         vec2 finalUV = outTexCoord + tiledUV * atlasSize;
         
         textureColor = texture(texture_sampler, finalUV);
-        if (textureColor.a < 0.5) {
+        
+        // Apply block-specific alpha detection via atlas coordinate
+        float blockAlpha = 1.0;
+        // Water is at atlas (3, 1) -> u0=0.75, v0=0.25
+        if (outTexCoord.x > 0.74 && outTexCoord.x < 0.76 && outTexCoord.y > 0.24 && outTexCoord.y < 0.26) {
+            blockAlpha = 0.6;
+        }
+
+        float finalAlpha = textureColor.a * blockAlpha;
+
+        // Two-pass discarding
+        if (uRenderPass == 0) {
+            // Opaque pass: discard anything semi-transparent or transparent
+            if (finalAlpha < 0.9) discard;
+        } else {
+            // Transparent pass: discard anything opaque
+            if (finalAlpha >= 0.9) discard;
+        }
+
+        if (finalAlpha < 0.1) {
             discard;
         }
         
@@ -55,7 +75,7 @@ void main()
         vec3 diffuse = diff * lightColor;
         vec3 lighting = ambient + diffuse;
         
-        fragColor = textureColor * vec4(lighting, 1.0);
+        fragColor = textureColor * vec4(lighting, finalAlpha);
     }
 
     // Apply Breaking Cracks Overlay - applies to both textures and solid colors

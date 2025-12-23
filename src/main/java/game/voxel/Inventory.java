@@ -1,7 +1,5 @@
 package game.voxel;
 
-import engine.voxel.Block;
-
 public class Inventory {
 
     private final Block[] hotbar;
@@ -34,6 +32,24 @@ public class Inventory {
             selectedSlot = slot;
             System.out.println("Selected Block: " + hotbar[selectedSlot]);
         }
+    }
+
+    public void removeItem(int slot) {
+        if (slot >= 0 && slot < hotbar.length) {
+            hotbar[slot] = Block.AIR;
+        }
+    }
+
+    public boolean addItem(Block block) {
+        if (block == Block.AIR)
+            return false;
+        for (int i = 0; i < hotbar.length; i++) {
+            if (hotbar[i] == Block.AIR) {
+                hotbar[i] = block;
+                return true;
+            }
+        }
+        return false;
     }
 
     public int getSelectedSlot() {

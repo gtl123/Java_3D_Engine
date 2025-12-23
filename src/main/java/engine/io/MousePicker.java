@@ -1,11 +1,11 @@
 package engine.io;
 
-import engine.graph.Camera;
-import engine.graph.Transformation;
+import engine.camera.Camera;
+import engine.raster.Transformation;
 
-import engine.voxel.Block;
-import engine.voxel.Chunk;
-import engine.voxel.ChunkManager;
+import game.voxel.Block;
+import game.voxel.Chunk;
+import game.voxel.ChunkManager;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;

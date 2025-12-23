@@ -1,11 +1,11 @@
 package game.voxel.entity;
 
-import engine.graph.Camera;
-import engine.graph.GameItem;
-import engine.graph.Mesh;
+import engine.camera.Camera;
+import engine.entity.Entity;
+import engine.raster.Mesh;
 import engine.physics.AABB;
-import engine.graph.CubeMeshBuilder;
-import engine.voxel.ChunkManager;
+import engine.raster.CubeMeshBuilder;
+import game.voxel.ChunkManager;
 import org.joml.Vector3f;
 
 import java.util.List;
@@ -14,12 +14,12 @@ public class PlayerController {
 
     private final Camera camera;
 
-    private final GameItem body;
-    private final GameItem leftArm;
-    private final GameItem rightArm;
-    private final GameItem leftLeg;
-    private final GameItem rightLeg;
-    private final GameItem head;
+    private final Entity body;
+    private final Entity leftArm;
+    private final Entity rightArm;
+    private final Entity leftLeg;
+    private final Entity rightLeg;
+    private final Entity head;
 
     private float armSwingTime = 0f;
     private float bodyYaw = 0f;
@@ -42,10 +42,13 @@ public class PlayerController {
 
     // Rigid body properties
     private float mass = 80.0f; // kg (approx human mass)
-    private static final float MOVE_FORCE = 2000.0f; // N
+    // Increased movement force for much faster walking/running.
+    // If this feels too fast, tune this value down slightly (e.g. 4000–6000).
+    private static final float MOVE_FORCE = 6000.0f; // N
     private static final float JUMP_FORCE = 2000.0f; // N
     private static final float GRAVITY = -9.81f; // m/s^2
-    private static final float DAMPING = 5f; // friction/drag
+    // Slightly reduced damping so high speeds are not immediately cancelled out.
+    private static final float DAMPING = 3f; // friction/drag
     private static final float EYE_HEIGHT = 1.6f;
 
     private boolean onGround = false;
@@ -100,12 +103,12 @@ public class PlayerController {
         Mesh legMesh = CubeMeshBuilder.createCube(0.25f, 0.8f, 0.25f);
         Mesh headMesh = CubeMeshBuilder.createCube(0.4f, 0.4f, 0.4f);
 
-        body = new GameItem(bodyMesh);
-        leftArm = new GameItem(armMesh);
-        rightArm = new GameItem(armMesh);
-        leftLeg = new GameItem(legMesh);
-        rightLeg = new GameItem(legMesh);
-        head = new GameItem(headMesh);
+        body = new Entity(bodyMesh);
+        leftArm = new Entity(armMesh);
+        rightArm = new Entity(armMesh);
+        leftLeg = new Entity(legMesh);
+        rightLeg = new Entity(legMesh);
+        head = new Entity(headMesh);
         this.headMeshInstance = headMesh;
         this.bodyMeshInstance = bodyMesh;
 
@@ -352,7 +355,7 @@ public class PlayerController {
         return viewRotation;
     }
 
-    public List<GameItem> getAllParts() {
+    public List<Entity> getAllParts() {
         // We only return the parts we want to render in the scene pass.
         // Hiding head for local player to prevent looking through your own skull.
         // limbs/head are children of body, but the renderer recursively draws children.
