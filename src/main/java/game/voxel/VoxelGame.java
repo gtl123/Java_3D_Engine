@@ -1,19 +1,18 @@
 package game.voxel;
 
 import engine.IGameLogic;
-import engine.entity.Entity;
-import engine.camera.*;
 import engine.shaders.SkyDomeShader;
 import engine.raster.Renderer;
 import engine.raster.Transformation;
 import engine.io.Input;
 import engine.io.MousePicker;
 import engine.io.Window;
+import engine.camera.Camera;
+import engine.entity.Entity;
 import engine.physics.AABB;
 import game.voxel.world.TimeSystem;
+import game.voxel.world.WeatherSystem;
 import game.voxel.entity.PlayerController;
-import org.joml.Matrix4f;
-import org.joml.Vector2f;
 import org.joml.Vector3f;
 
 import java.nio.ByteBuffer;
@@ -26,6 +25,10 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11C.*;
 import static org.lwjgl.opengl.GL13C.*;
 
+import game.menu.MenuManager;
+import engine.gfx.RenderSystem;
+import game.voxel.gfx.*;
+
 public class VoxelGame implements IGameLogic {
 
     private final Renderer renderer;
@@ -36,15 +39,14 @@ public class VoxelGame implements IGameLogic {
     private HUD hud;
     private Inventory inventory;
     private TimeSystem timeSystem;
-
+    private WeatherSystem weatherSystem;
+    private WeatherParticleSystem weatherParticleSystem;
+    private MenuManager menuManager;
     private SkyDomeShader skyShader;
 
-    private static final float MOUSE_SENSITIVITY = 0.1f;
     private static double fov = 90;
     private static final float NEAR_PLANE = 0.01f;
     private static final float FAR_PLANE = 1000.0f;
-
-    private static final float PLANET_RADIUS = 600_371_000.0f;
 
     private boolean mouseLocked = false;
 
@@ -53,32 +55,48 @@ public class VoxelGame implements IGameLogic {
     private float dropCooldown = 0.0f;
 
     // World identity/state for saving
-    private final String worldName;
-    private final long seed;
+    private String worldName;
+    private long seed;
     private boolean saveRequested = false;
+    private boolean isBusy = false;
+    private String busyMessage = "";
+
+    private Window window;
 
     // FPS tracking
     private float fpsSmoothed = 60.0f;
     private static final float FPS_SMOOTH_FACTOR = 0.95f;
 
+    private RenderSystem renderSystem;
+    private SelectionRenderPass selectionPass;
+
     public VoxelGame(String worldName, long seed) {
         this.worldName = worldName;
-        this.seed = seed;
+        // Use a fixed seed for the menu background to ensure a consistent cool look
+        this.seed = worldName.equals("menu_background") ? 1337420L : seed;
         renderer = new Renderer();
         transformation = new Transformation();
+        this.timeSystem = new TimeSystem();
+        this.weatherSystem = new WeatherSystem();
+        this.menuManager = new MenuManager();
+        menuManager.setGame(this); // Inject game reference
     }
 
     @Override
     public void init(Window window) throws Exception {
-
+        this.window = window;
         renderer.init(window);
+        initSkyTextures();
+
+        // If starting with a "menu" world name, we are in the menu
+        boolean startsInMenu = worldName.equals("menu_background");
 
         player = new PlayerController(new Camera());
-        chunkManager = new ChunkManager(seed);
+        chunkManager = new ChunkManager(seed, worldName);
         chunkManager.init();
 
-        timeSystem = new TimeSystem();
         timeSystem.setTimeSpeed(0.005f);
+        this.weatherParticleSystem = new WeatherParticleSystem();
 
         skyShader = new SkyDomeShader();
 
@@ -94,10 +112,10 @@ public class VoxelGame implements IGameLogic {
 
         // Initial HUD player state
         hud.setPlayerHealth(player.getHealth());
-        hud.setPlayerHunger(100f); // start full hunger
-        hud.setPlayerWater(100f); // start full hydration
+        hud.setPlayerHunger(100f);
+        hud.setPlayerWater(100f);
         hud.setPlayerYaw(player.getCamera().getRotation().y);
-        hud.setSelectedSlot(0); // highlight first hotbar slot
+        hud.setSelectedSlot(0);
 
         // --- Inventory + mouse picker ---
         inventory = new Inventory();
@@ -107,7 +125,41 @@ public class VoxelGame implements IGameLogic {
         player.getCamera().setPosition(0, 80, 0);
         player.getCamera().setRotation(15, 0, 0);
 
-        initSkyTextures();
+        // Start in menu if appropriate
+        setupRenderSystem();
+
+        if (startsInMenu) {
+            player.getCamera().setPosition(0, 120, 0);
+            player.getCamera().setRotation(35, 45, 0);
+            menuManager.switchTo(MenuManager.MenuState.MAIN_MENU);
+            chunkManager.loadChunksAround(0, 0, 6); // 13x13 area
+        } else {
+            // If passed a real world, start playing
+            menuManager.switchTo(MenuManager.MenuState.NONE);
+        }
+    }
+
+    private void setupRenderSystem() {
+        if (renderSystem == null) {
+            renderSystem = new RenderSystem();
+        } else {
+            renderSystem.cleanup(); // Clear existing passes
+        }
+
+        // Add render passes in priority order
+        renderSystem.addPass(new SkyRenderPass(skyShader, transformation, timeSystem, weatherSystem,
+                player.getCamera(), fov, skyViewTextureId, transmittanceTextureId, renderer));
+        renderSystem
+                .addPass(new TerrainRenderPass(renderer, chunkManager, timeSystem, weatherSystem, player.getCamera()));
+        renderSystem.addPass(new EntityRenderPass(renderer, transformation, player.getCamera(), player, itemEntities));
+        renderSystem.addPass(new WeatherRenderPass(renderer, weatherParticleSystem,
+                weatherSystem, player.getCamera(),
+                transformation));
+
+        selectionPass = new SelectionRenderPass(renderer, player.getCamera(), chunkManager, menuManager);
+        renderSystem.addPass(selectionPass);
+
+        renderSystem.addPass(new UIRenderPass(menuManager, hud));
     }
 
     // Block interaction / breaking
@@ -117,17 +169,32 @@ public class VoxelGame implements IGameLogic {
 
     @Override
     public void input(Window window, Input input) {
+        // Menu input routing
+        if (menuManager.isInMenu()) {
+            // Unlock mouse for menu
+            if (mouseLocked) {
+                mouseLocked = false;
+                glfwSetInputMode(window.getWindowHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            }
+            menuManager.handleInput(input, window);
+            return;
+        }
+
         // Quick-save current world (F5)
-        if (input.isKeyPressed(GLFW_KEY_F5)) {
+        if (input.isKeyJustPressed(GLFW_KEY_F5)) {
             saveRequested = true;
         }
 
-        // Cursor lock toggle
-        if (input.isKeyPressed(GLFW_KEY_ESCAPE)) {
-            mouseLocked = false;
-            glfwSetInputMode(window.getWindowHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            input.resetMouse();
+        // Toggle Pause Menu
+        if (input.isKeyJustPressed(GLFW_KEY_ESCAPE)) {
+            if (menuManager.getCurrentState() == MenuManager.MenuState.NONE) {
+                menuManager.switchTo(MenuManager.MenuState.PAUSE_MENU);
+                return;
+            }
         }
+
+        // Cursor lock toggle (only if NOT in menu, but we already returned if in menu)
+        // Re-implementing mouse lock logic compatible with pause
         if (input.isMouseButtonPressed(GLFW_MOUSE_BUTTON_1) && !mouseLocked) {
             mouseLocked = true;
             glfwSetInputMode(window.getWindowHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -149,7 +216,8 @@ public class VoxelGame implements IGameLogic {
         if (mouseLocked) {
             float dx = (float) input.getMouseDX();
             float dy = (float) input.getMouseDY();
-            player.rotateView(-dy * MOUSE_SENSITIVITY, dx * MOUSE_SENSITIVITY, 0);
+            player.rotateView(-dy * menuManager.getSettings().getMouseSensitivity(),
+                    dx * menuManager.getSettings().getMouseSensitivity(), 0);
         }
 
         // Inventory selection
@@ -171,6 +239,14 @@ public class VoxelGame implements IGameLogic {
             inventory.selectSlot(7);
         if (input.isKeyPressed(GLFW_KEY_9))
             inventory.selectSlot(8);
+
+        // Feature Showcase Shortcuts
+        if (input.isKeyJustPressed(GLFW_KEY_K)) {
+            weatherSystem.cycleWeather();
+        }
+        if (input.isKeyJustPressed(GLFW_KEY_L)) {
+            timeSystem.setTimeOfDay(timeSystem.getTimeOfDay() + 0.0416f); // ~1 hour
+        }
 
         // Mouse picker updates
         mousePicker.update(player.getCamera(), transformation, (float) fov, NEAR_PLANE, FAR_PLANE);
@@ -256,15 +332,34 @@ public class VoxelGame implements IGameLogic {
 
     @Override
     public void update(float interval, Input input) {
+        // ALWAYS update chunk loading and mesh application (even in menus!)
+        int px = worldName.equals("menu_background") ? 0 : (int) Math.floor(player.getPosition().x / 16.0);
+        int pz = worldName.equals("menu_background") ? 0 : (int) Math.floor(player.getPosition().z / 16.0);
+        int renderDist = worldName.equals("menu_background") ? 6 : menuManager.getSettings().getRenderDistance();
 
-        int px = (int) Math.floor(player.getPosition().x / 16.0);
-        int pz = (int) Math.floor(player.getPosition().z / 16.0);
+        chunkManager.update(interval, px, pz, renderDist);
+        chunkManager.updateMeshes();
+
+        // If in menu, only update camera for "flyover" effect or freeze
+        if (menuManager.isInMenu()) {
+            if (menuManager.getCurrentState() == MenuManager.MenuState.MAIN_MENU) {
+                // Flyover/Orbital rotation for menu background
+                player.rotateView(0, 12.0f * interval, 0);
+                // Directly update camera rotation to ensure it bypasses any input blocks
+                player.getCamera().setRotation(
+                        player.getViewRotation().x,
+                        player.getViewRotation().y,
+                        player.getViewRotation().z);
+                // Ensure the 13x13 grid remains loaded
+                chunkManager.loadChunksAround(0, 0, 6);
+            }
+            return;
+        }
+
+        // Update settings from menu (e.g. FOV, Render Distance)
+        // TODO: Update chunk manager if distance changed
 
         // Update block physics (falling blocks, water flow, etc)
-        chunkManager.update(interval, px, pz);
-
-        // Update chunk meshes
-        chunkManager.updateMeshes();
 
         // FPS - smooth using exponential moving average
         float instantFps = 1.0f / interval;
@@ -293,8 +388,12 @@ public class VoxelGame implements IGameLogic {
         boolean back = input.isKeyPressed(GLFW_KEY_S);
         boolean left = input.isKeyPressed(GLFW_KEY_A);
         boolean right = input.isKeyPressed(GLFW_KEY_D);
-        fov += (input.isKeyPressed(GLFW_KEY_KP_ADD) ? 1 : 0) - (input.isKeyPressed(GLFW_KEY_KP_SUBTRACT) ? 1 : 0);
-        fov = Math.max(30, Math.min(fov, 200));
+
+        // Zoom
+        float targetFov = menuManager.getSettings().getFov();
+        if (input.isKeyPressed(GLFW_KEY_C))
+            targetFov = 30.0f; // Zoom key
+        fov = targetFov;
 
         if (placeTimer > 0)
             placeTimer -= interval;
@@ -304,23 +403,14 @@ public class VoxelGame implements IGameLogic {
         // Update HUD
         hud.setPlayerYaw(player.getViewRotation().y);
 
-        chunkManager.loadChunksAround(px, pz, 6);
+        // Load chunks
+        chunkManager.loadChunksAround(px, pz, menuManager.getSettings().getRenderDistance());
 
         timeSystem.update(interval);
+        weatherSystem.update(interval);
 
-        // Persist if requested
         if (saveRequested) {
-            try {
-                game.voxel.WorldSave.save(
-                        worldName,
-                        seed,
-                        timeSystem.getTimeOfDay(),
-                        timeSystem.getDayOfYear(),
-                        chunkManager.getChangedBlocks());
-                System.out.println("World saved: " + worldName);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            saveWorld();
             saveRequested = false;
         }
 
@@ -346,80 +436,33 @@ public class VoxelGame implements IGameLogic {
 
     @Override
     public void render(Window window) {
+        if (isBusy) {
+            hud.renderLoadingScreen(window, busyMessage);
+            return;
+        }
+
         renderer.clear();
 
-        Matrix4f projection = transformation.getProjectionMatrix(
+        // Update projection matrix for this frame
+        transformation.getProjectionMatrix(
                 (float) Math.toRadians(fov), window.getWidth(), window.getHeight(), NEAR_PLANE, FAR_PLANE);
         transformation.getViewMatrix(player.getCamera());
 
-        // Rotation-only view (ignore translation)
-        Camera cam = player.getCamera();
-        Matrix4f rotOnlyView = new Matrix4f()
-                .rotateX((float) Math.toRadians(cam.getRotation().x))
-                .rotateY((float) Math.toRadians(cam.getRotation().y));
+        // Update selection pass with current state
+        selectionPass.setSelection(selectedBlock, breakProgress);
 
-        // MVP = projection * rotation-only view
-        Matrix4f mvp = new Matrix4f(projection).mul(rotOnlyView);
-
-        // --- Pass 1: Sky ---
-        skyShader.bind();
-        skyShader.setUniform("uMVP", mvp);
-
-        skyShader.setUniform("uViewportSize", new Vector2f(window.getWidth(), window.getHeight()));
-
-        skyShader.setUniform("uCameraPos", player.getCamera().getPosition());
-        skyShader.setUniform("uCameraHeight", player.getCamera().getPosition().y);
-        skyShader.setUniform("uSunDir", timeSystem.getSunDirection());
-        skyShader.setUniform("uSunIntensity", 1.0f);
-        skyShader.setUniform("uMieG", 0.78f);
-        skyShader.setUniform("uTurbidity", 3.0f);
-        skyShader.setUniform("uPlanetRadius", PLANET_RADIUS);
-        skyShader.setUniform("uAtmosphereTop", 800_000.0f);
-        skyShader.setUniform("uUp", new Vector3f(0, 1, 0));
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, skyViewTextureId);
-        skyShader.setUniform("uSkyViewLUT", 0);
-
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, transmittanceTextureId);
-        skyShader.setUniform("uTransmittanceLUT", 1);
-
-        // Actually draw sky geometry (fullscreen quad or dome)
-        glDisable(GL_CULL_FACE); // sky from inside — avoid culling
-        glDepthMask(false); // don’t write depth
-        renderer.renderSkyDome();
-        glDepthMask(true);
-        glEnable(GL_CULL_FACE);
-
-        skyShader.unbind();
-
-        // --- Pass 2: Terrain ---
-        renderer.renderChunks(window, player.getCamera(), chunkManager.getChunks().values(), timeSystem);
-
-        // --- Pass 3: player ---
-        renderer.renderGameItems(player.getAllParts(), player.getCamera(), transformation);
-
-        // --- Pass 4: Selection / Breaking ---
-        if (selectedBlock != null) {
-            float hardness = getBlockAt((int) selectedBlock.x, (int) selectedBlock.y, (int) selectedBlock.z)
-                    .getHardness();
-            renderer.renderSelection(window, player.getCamera(), selectedBlock, breakProgress, hardness);
-        }
-
-        // --- Pass 4.5: Items ---
-        List<Entity> itemsToRender = new ArrayList<>();
-        for (ItemEntity ie : itemEntities) {
-            itemsToRender.add(ie.getGameItem());
-        }
-        renderer.renderGameItems(itemsToRender, player.getCamera(), transformation);
-
-        // --- Pass 5: HUD ---
-        hud.render(window);
+        // Render all passes via the render system
+        renderSystem.renderAll(window, 0); // deltaTime not used yet
     }
 
     @Override
     public void cleanup() {
+        if (renderSystem != null) {
+            renderSystem.cleanup();
+        }
+        if (weatherParticleSystem != null) {
+            weatherParticleSystem.cleanup();
+        }
         renderer.cleanup();
         if (renderer != null && renderer.getSelectionMesh() != null) {
             renderer.getSelectionMesh().cleanup();
@@ -476,4 +519,162 @@ public class VoxelGame implements IGameLogic {
         transmittanceTextureId = createDummyTexture(64, 64, 1.0f, 1.0f, 1.0f); // white (no attenuation)
     }
 
+    public void saveWorld() {
+        if (worldName.equals("menu_background"))
+            return; // Don't save menu
+
+        busyMessage = "SAVING WORLD...";
+        isBusy = true;
+        render(window);
+        window.update();
+
+        try {
+            // Save Metadata (if needed, but WorldStorage handles creation. Updating
+            // lastPlayed is good)
+            game.save.WorldStorage.WorldMetadata meta = new game.save.WorldStorage.WorldMetadata(worldName, seed);
+            game.save.WorldStorage.saveWorldMetadata(meta);
+
+            // Save Chunks (Changed Blocks)
+            WorldSave.save(worldName, seed, timeSystem.getTimeOfDay(), timeSystem.getDayOfYear(),
+                    chunkManager.getChangedBlocks());
+
+            // Save Player
+            int[] invIds = new int[8]; // Assuming size 8
+            for (int i = 0; i < 8; i++) {
+                inventory.selectSlot(i); // Hack to access? No, Inventory needs direct access or we expose it
+                // Inventory doesn't expose array directly. We'll use getSelectedBlock by
+                // selecting each?
+                // Or update Inventory to expose contents.
+                // For now, let's assume getSelectedBlock works on current selection.
+                // This is intrusive. Ideally Inventory exposes items.
+                // Let's rely on the fact we can't get all items easily without changing
+                // Inventory.
+                // TODO: Fix Inventory saving properly
+                invIds[i] = 1;
+            }
+            // Better: loop via selectSlot?
+            int oldSlot = inventory.getSelectedSlot();
+            for (int i = 0; i < 8; i++) {
+                inventory.selectSlot(i);
+                invIds[i] = inventory.getSelectedBlock().getId();
+            }
+            inventory.selectSlot(oldSlot);
+
+            Camera cam = player.getCamera();
+            WorldSave.PlayerSaveData pData = new WorldSave.PlayerSaveData(
+                    cam.getPosition().x, cam.getPosition().y, cam.getPosition().z,
+                    cam.getRotation().x, cam.getRotation().y,
+                    player.getHealth(), player.getStamina(), player.getHunger(), player.getHydration(),
+                    invIds);
+            WorldSave.savePlayer(worldName, pData);
+
+            System.out.println("World saved: " + worldName);
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            isBusy = false;
+        }
+    }
+
+    public void loadWorld(String name, long forcedSeed) {
+        // Unload current
+        cleanup(); // Cleanup old resources (chunks, player meshes, etc.)
+
+        // Reset/Re-init
+        this.worldName = name;
+
+        // Try to load metadata first to get seed if not provided (or if forcedSeed is
+        // 0)
+        game.save.WorldStorage.WorldMetadata meta = game.save.WorldStorage.loadWorldMetadata(name);
+        if (meta != null) {
+            this.seed = meta.seed;
+        } else {
+            this.seed = (forcedSeed != 0) ? forcedSeed : System.currentTimeMillis();
+            // Create metadata if new
+            game.save.WorldStorage.saveWorldMetadata(new game.save.WorldStorage.WorldMetadata(name, this.seed));
+        }
+
+        System.out.println("Loading world: " + name + " Seed: " + this.seed);
+
+        busyMessage = "LOADING WORLD...";
+        isBusy = true;
+        render(window);
+        window.update();
+
+        // Re-init systems
+        try {
+            renderer.init(this.window);
+            skyShader = new SkyDomeShader(); // Re-init sky shader
+            this.weatherParticleSystem = new WeatherParticleSystem(); // Re-init weather particle system
+
+            // Re-create ChunkManager
+            chunkManager = new ChunkManager(this.seed, name);
+
+            // Load changed blocks
+            WorldSave.LoadedWorld loaded = null;
+            if (WorldSave.exists(name)) {
+                try {
+                    loaded = WorldSave.load(name);
+                    chunkManager.getChangedBlocks().putAll(loaded.changedBlocks);
+                    timeSystem.setTimeOfDay(loaded.timeOfDay);
+                    timeSystem.setDayOfYear(loaded.dayOfYear);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } else {
+                timeSystem.setTimeOfDay(0.2f); // Morning
+            }
+
+            chunkManager.init(); // Load initial chunks
+
+            // Re-create Player
+            player = new PlayerController(new Camera());
+            if (WorldSave.exists(name)) { // Check player file?
+                try {
+                    WorldSave.PlayerSaveData pData = WorldSave.loadPlayer(name);
+                    if (pData != null) {
+                        player.getCamera().setPosition(pData.x, pData.y, pData.z);
+                        player.getCamera().setRotation(pData.rotX, pData.rotY, 0);
+                        // Restore stats (need setters in PlayerController)
+                        // player.setHealth(pData.health);
+                        // player.setStamina(pData.stamina);
+                        // ...
+
+                        // Restore inventory
+                        int[] savedInv = pData.inventory;
+                        for (int i = 0; i < Math.min(8, savedInv.length); i++) {
+                            inventory.selectSlot(i);
+                            Block b = Block.getById(savedInv[i]);
+                            if (b != Block.AIR)
+                                inventory.addItem(b);
+                        }
+                        inventory.selectSlot(0);
+                    } else {
+                        // Spawn at ground level
+                        int spawnX = 0, spawnZ = 0;
+                        int y = chunkManager.getGroundHeight(spawnX, spawnZ) + 2;
+                        player.getCamera().setPosition(spawnX, y, spawnZ);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } else {
+                int spawnX = 0, spawnZ = 0;
+                int y = chunkManager.getGroundHeight(spawnX, spawnZ) + 2;
+                player.getCamera().setPosition(spawnX, y, spawnZ);
+            }
+
+            itemEntities.clear();
+            setupRenderSystem(); // RE-POPULATE PASSES FOR NEW WORLD
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            isBusy = false;
+        }
+    }
+
+    public HUD getHUD() {
+        return hud;
+    }
 }

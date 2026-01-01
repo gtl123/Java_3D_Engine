@@ -113,7 +113,7 @@ public class MousePicker {
     private Block getBlock(ChunkManager cm, int x, int y, int z) {
         int cx = x >> 4;
         int cz = z >> 4;
-        String key = ChunkManager.getChunkKey(cx, cz);
+        long key = ChunkManager.getChunkKey(cx, cz);
         Chunk c = cm.getChunks().get(key);
         if (c != null) {
             int lx = x & 15;

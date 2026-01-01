@@ -38,6 +38,8 @@ public class Engine implements Runnable {
             gameLoop();
         } catch (Exception e) {
             e.printStackTrace();
+            javax.swing.JOptionPane.showMessageDialog(null, "Engine Error: " + e.getMessage(), "Error",
+                    javax.swing.JOptionPane.ERROR_MESSAGE);
         } finally {
             cleanup();
         }

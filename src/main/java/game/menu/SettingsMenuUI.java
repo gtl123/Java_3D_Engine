@@ -3,6 +3,7 @@ package game.menu;
 import engine.io.Input;
 import engine.io.Window;
 import game.GameSettings;
+import game.voxel.HUD;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -31,6 +32,9 @@ public class SettingsMenuUI {
     private GameSettings settings;
     private Setting selectedSetting = Setting.RENDER_DISTANCE;
 
+    // private long lastInputTime = 0; // Removed unused
+    // private static final long INPUT_DELAY = 150_000_000L; // Removed unused
+
     public SettingsMenuUI(MenuManager menuManager, GameSettings settings) {
         this.menuManager = menuManager;
         this.settings = settings;
@@ -38,62 +42,156 @@ public class SettingsMenuUI {
 
     public void handleInput(Input input, Window window) {
         // Navigate settings
-        if (input.isKeyPressed(GLFW.GLFW_KEY_UP) || input.isKeyPressed(GLFW.GLFW_KEY_W)) {
+        if (input.isKeyJustPressed(GLFW.GLFW_KEY_UP) || input.isKeyJustPressed(GLFW.GLFW_KEY_W)
+                || (input.isKeyJustPressed(GLFW.GLFW_KEY_TAB) && input.isKeyPressed(GLFW.GLFW_KEY_LEFT_SHIFT))) {
             selectedSetting = Setting.values()[(selectedSetting.ordinal() - 1 + Setting.values().length)
                     % Setting.values().length];
         }
-        if (input.isKeyPressed(GLFW.GLFW_KEY_DOWN) || input.isKeyPressed(GLFW.GLFW_KEY_S)) {
+        if (input.isKeyJustPressed(GLFW.GLFW_KEY_DOWN) || input.isKeyJustPressed(GLFW.GLFW_KEY_S)
+                || input.isKeyJustPressed(GLFW.GLFW_KEY_TAB)) {
             selectedSetting = Setting.values()[(selectedSetting.ordinal() + 1) % Setting.values().length];
         }
 
         // Adjust selected setting
-        if (input.isKeyPressed(GLFW.GLFW_KEY_LEFT) || input.isKeyPressed(GLFW.GLFW_KEY_A)) {
+        if (input.isKeyJustPressed(GLFW.GLFW_KEY_LEFT) || input.isKeyJustPressed(GLFW.GLFW_KEY_A)) {
             adjustSetting(-1);
         }
-        if (input.isKeyPressed(GLFW.GLFW_KEY_RIGHT) || input.isKeyPressed(GLFW.GLFW_KEY_D)) {
+        if (input.isKeyJustPressed(GLFW.GLFW_KEY_RIGHT) || input.isKeyJustPressed(GLFW.GLFW_KEY_D)) {
             adjustSetting(1);
         }
 
         // Save and exit
-        if (input.isKeyPressed(GLFW.GLFW_KEY_ENTER)) {
+        if (input.isKeyJustPressed(GLFW.GLFW_KEY_ENTER)) {
             settings.save();
             menuManager.goBack();
         }
 
         // Cancel
-        if (input.isKeyPressed(GLFW.GLFW_KEY_ESCAPE)) {
+        if (input.isKeyJustPressed(GLFW.GLFW_KEY_ESCAPE)) {
             settings.load(); // Revert changes
             menuManager.goBack();
         }
+
+        // Mouse Interaction
+        double mx = input.getMouseX();
+        double my = input.getMouseY();
+        boolean mouseMoved = input.getMouseDX() != 0 || input.getMouseDY() != 0;
+
+        float startY = 200;
+        float spacing = 60f;
+        float fontHeight = 35f; // 5 * 7
+        float btnWidth = 500f; // estimation
+
+        // Settings list
+        Setting[] settingsList = Setting.values();
+        for (int i = 0; i < settingsList.length; i++) {
+            float y = startY + i * spacing;
+
+            boolean over = mx >= (window.getWidth() / 2f - btnWidth / 2f)
+                    && mx <= (window.getWidth() / 2f + btnWidth / 2f)
+                    && my >= y && my <= (y + fontHeight);
+
+            if (over) {
+                if (mouseMoved) {
+                    selectedSetting = settingsList[i];
+                }
+                // Left click -> Increase
+                if (input.isMouseButtonJustPressed(GLFW.GLFW_MOUSE_BUTTON_1)) {
+                    selectedSetting = settingsList[i];
+                    adjustSetting(1);
+                }
+                // Right click -> Decrease
+                if (input.isMouseButtonJustPressed(GLFW.GLFW_MOUSE_BUTTON_2)) {
+                    selectedSetting = settingsList[i];
+                    adjustSetting(-1);
+                }
+            }
+        }
+
+        // Save Button
+        float saveY = window.getHeight() - 100;
+        float saveHeight = 28f;
+        boolean overSave = mx >= (window.getWidth() / 2f - btnWidth / 2f)
+                && mx <= (window.getWidth() / 2f + btnWidth / 2f)
+                && my >= saveY && my <= (saveY + saveHeight);
+        if (overSave && input.isMouseButtonJustPressed(GLFW.GLFW_MOUSE_BUTTON_1)) {
+            settings.save();
+            menuManager.goBack();
+        }
+
+        // Cancel Button
+        float cancelY = window.getHeight() - 60;
+        boolean overCancel = mx >= (window.getWidth() / 2f - btnWidth / 2f)
+                && mx <= (window.getWidth() / 2f + btnWidth / 2f)
+                && my >= cancelY && my <= (cancelY + saveHeight);
+        if (overCancel && input.isMouseButtonJustPressed(GLFW.GLFW_MOUSE_BUTTON_1)) {
+            settings.load();
+            menuManager.goBack();
+        }
+
     }
 
     private void adjustSetting(int delta) {
         switch (selectedSetting) {
             case RENDER_DISTANCE:
-                settings.setRenderDistance(settings.getRenderDistance() + delta);
+                int rd = Math.max(Setting.RENDER_DISTANCE.min,
+                        Math.min(Setting.RENDER_DISTANCE.max, settings.getRenderDistance() + delta));
+                settings.setRenderDistance(rd);
                 break;
             case FOV:
-                settings.setFov(settings.getFov() + delta);
+                float fov = Math.max(Setting.FOV.min, Math.min(Setting.FOV.max, settings.getFov() + delta * 5)); // 5
+                                                                                                                 // degree
+                                                                                                                 // steps
+                settings.setFov(fov);
                 break;
             case VSYNC:
                 settings.setVsync(!settings.isVsync());
                 break;
             case MOUSE_SENSITIVITY:
-                float newSens = settings.getMouseSensitivity() + (delta * 0.1f);
+                // Sens is stored as float, min/max for sens in Setting are 1 and 20 (*0.1)
+                float currentSens = settings.getMouseSensitivity();
+                float newSens = Math.max(Setting.MOUSE_SENSITIVITY.min * 0.1f,
+                        Math.min(Setting.MOUSE_SENSITIVITY.max * 0.1f, currentSens + (delta * 0.1f)));
                 settings.setMouseSensitivity(newSens);
                 break;
         }
     }
 
     public void render(Window window) {
-        // TODO: Implement 2D rendering
-        System.out.println("Settings Menu:");
+        HUD hud = menuManager.getGame().getHUD();
+        hud.bind();
+
+        // Background
+        hud.renderRect(window.getWidth() / 2f, window.getHeight() / 2f, window.getWidth(), window.getHeight(),
+                new org.joml.Vector4f(0, 0, 0, 0.8f));
+
+        // Title
+        hud.renderTextCentered("SETTINGS", window.getWidth() / 2f, 100, 8f);
+
+        // Options
+        float startY = 200;
+        float spacing = 60f;
+        int i = 0;
+
         for (Setting s : Setting.values()) {
-            String marker = (s == selectedSetting) ? "> " : "  ";
-            String value = getValue(s);
-            System.out.println(marker + s.display + ": " + value);
+            float y = startY + i * spacing;
+            boolean selected = (s == selectedSetting);
+            org.joml.Vector4f color = selected ? new org.joml.Vector4f(1f, 1f, 0f, 1f)
+                    : new org.joml.Vector4f(1f, 1f, 1f, 1f);
+
+            String text = s.display + ": " + getValue(s);
+            if (selected) {
+                hud.renderTextCentered("> " + text + " <", window.getWidth() / 2f, y, 5f, color);
+            } else {
+                hud.renderTextCentered(text, window.getWidth() / 2f, y, 5f, color);
+            }
+            i++;
         }
-        System.out.println("\nPress Enter to Save, ESC to Cancel");
+
+        hud.renderTextCentered("PRESS ENTER TO SAVE", window.getWidth() / 2f, window.getHeight() - 100, 4f);
+        hud.renderTextCentered("PRESS ESC TO CANCEL", window.getWidth() / 2f, window.getHeight() - 60, 4f);
+
+        hud.unbind();
     }
 
     private String getValue(Setting s) {
@@ -101,7 +199,7 @@ public class SettingsMenuUI {
             case RENDER_DISTANCE:
                 return String.valueOf(settings.getRenderDistance()) + " chunks";
             case FOV:
-                return String.format("%.0f°", settings.getFov());
+                return String.format("%.0f deg", settings.getFov());
             case VSYNC:
                 return settings.isVsync() ? "On" : "Off";
             case MOUSE_SENSITIVITY:
