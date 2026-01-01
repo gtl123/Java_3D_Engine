@@ -12,6 +12,7 @@ out vec3 worldNormal;
 
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
+uniform mat4 uModelMatrix;
 
 void main()
 {
@@ -21,7 +22,8 @@ void main()
     mvVertexNormal = normalize(modelViewMatrix * vec4(vertexNormal, 0.0)).xyz;
     mvVertexPos = mvPos.xyz;
     
-    // Pass world position and normal for texture tiling
-    worldPos = position;
-    worldNormal = vertexNormal;
+    // Pass real world position and normal for texture tiling
+    worldPos = (uModelMatrix * vec4(position, 1.0)).xyz;
+    worldNormal = normalize((uModelMatrix * vec4(vertexNormal, 0.0)).xyz);
 }
+

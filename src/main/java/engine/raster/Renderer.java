@@ -7,6 +7,7 @@ import engine.io.Window;
 import engine.utils.Utils;
 import game.voxel.Chunk;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -20,7 +21,7 @@ import static org.lwjgl.opengl.GL30.*;
 
 public class Renderer {
 
-    private static final float FOV = (float) Math.toRadians(120.0f); // align with VoxelGame
+    private static final float FOV = 90.0f; // degrees, matches VoxelGame default
     private static final float Z_NEAR = 0.01f;
     private static final float Z_FAR = 1000.f;
 
@@ -59,6 +60,9 @@ public class Renderer {
         setupInstancedShader();
         initSceneTarget(window.getWidth(), window.getHeight());
 
+        glClearColor(0.2f, 0.4f, 0.9f, 1f); // Sky blue
+
+        glViewport(0, 0, window.getWidth(), window.getHeight());
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
@@ -72,13 +76,14 @@ public class Renderer {
     }
 
     public void renderSelection(Window window, Camera camera, org.joml.Vector3f pos, float progress,
-                                float maxHardness) {
+            float maxHardness) {
         if (pos == null)
             return;
 
         shaderProgram.bind();
 
-        Matrix4f projectionMatrix = transformation.getProjectionMatrix(FOV, window.getWidth(), window.getHeight(),
+        Matrix4f projectionMatrix = transformation.getProjectionMatrix((float) Math.toRadians(FOV), window.getWidth(),
+                window.getHeight(),
                 Z_NEAR, Z_FAR);
         shaderProgram.setUniform("projectionMatrix", projectionMatrix);
 
@@ -87,12 +92,17 @@ public class Renderer {
         Matrix4f modelViewMatrix = new Matrix4f(viewMatrix).mul(modelMatrix);
 
         shaderProgram.setUniform("modelViewMatrix", modelViewMatrix);
+        shaderProgram.setUniform("uModelMatrix", modelMatrix);
         shaderProgram.setUniform("useColour", 1);
         shaderProgram.setUniform("texture_sampler", 0);
 
         // Pass breaking progress to the shader for procedural cracks
         float progressRatio = progress / Math.max(0.1f, maxHardness);
         shaderProgram.setUniform("uBreakProgress", progressRatio);
+        shaderProgram.setUniform("uRenderPass", 0);
+        shaderProgram.setUniform("uAlpha", 1.0f);
+        shaderProgram.setUniform("uFogDensity", 0.0f);
+        shaderProgram.setUniform("uSkyDarkness", 0.0f);
 
         // Render Semi-transparent fill
         glEnable(GL_BLEND);
@@ -105,19 +115,54 @@ public class Renderer {
         shaderProgram.setUniform("uAlpha", alphaValue);
 
         // --- Pass 1: Semi-transparent Fill ---
+        // Inline manual render to avoid uBreakProgress reset in renderGameItemQuick
+        shaderProgram.setUniform("useColour", 1);
         selectionMesh.render();
 
-        // --- Pass 2: Wireframe ---
+        // Pass 2: Wireframe
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glLineWidth(2.0f);
-        shaderProgram.setUniform("colour", new org.joml.Vector3f(0.0f, 0.0f, 0.0f)); // black outline
-        shaderProgram.setUniform("uAlpha", 1.0f); // Wireframe is opaque
+        shaderProgram.setUniform("uAlpha", 1.0f);
+        shaderProgram.setUniform("colour", new org.joml.Vector3f(0, 0, 0)); // Black wireframe
         selectionMesh.render();
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-        glDisable(GL_BLEND);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glEnable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
         shaderProgram.unbind();
+    }
+
+    public void bindShader() {
+        shaderProgram.bind();
+    }
+
+    public void unbindShader() {
+        shaderProgram.unbind();
+    }
+
+    public void setupSceneUniforms(Camera camera, Transformation transformation) {
+        Matrix4f projectionMatrix = transformation.getProjectionMatrix(
+                (float) Math.toRadians(FOV), sceneWidth, sceneHeight, Z_NEAR, Z_FAR);
+        shaderProgram.setUniform("projectionMatrix", projectionMatrix);
+        shaderProgram.setUniform("viewMatrix", transformation.getViewMatrix(camera));
+        shaderProgram.setUniform("texture_sampler", 0);
+    }
+
+    public void renderGameItemQuick(Mesh mesh, Matrix4f modelViewMatrix) {
+        if (mesh == null)
+            return;
+
+        shaderProgram.setUniform("modelViewMatrix", modelViewMatrix);
+        shaderProgram.setUniform("colour", mesh.getColour());
+        shaderProgram.setUniform("useColour", mesh.getTexture() != null ? 0 : 1);
+        shaderProgram.setUniform("uBreakProgress", 0.0f);
+        shaderProgram.setUniform("uAlpha", 1.0f);
+
+        if (mesh.getTexture() != null) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, mesh.getTexture().getId());
+        }
+
+        mesh.render();
     }
 
     public Mesh getSelectionMesh() {
@@ -155,6 +200,21 @@ public class Renderer {
         shaderProgram.createUniform("uBreakProgress");
         shaderProgram.createUniform("uAlpha");
         shaderProgram.createUniform("uRenderPass");
+        shaderProgram.createUniform("uModelMatrix");
+
+        // Weather uniforms
+        shaderProgram.createUniform("uFogDensity");
+        shaderProgram.createUniform("uFogColor");
+        shaderProgram.createUniform("uSkyDarkness");
+
+        // Initialize safe defaults
+        shaderProgram.bind();
+        shaderProgram.setUniform("uFogDensity", 0.0f);
+        shaderProgram.setUniform("uFogColor", new Vector3f(1, 1, 1));
+        shaderProgram.setUniform("uSkyDarkness", 0.0f);
+        shaderProgram.setUniform("uAlpha", 1.0f);
+        shaderProgram.setUniform("uRenderPass", 0);
+        shaderProgram.unbind();
     }
 
     private void setupInstancedShader() throws Exception {
@@ -238,11 +298,14 @@ public class Renderer {
         shaderProgram.bind();
 
         Matrix4f projectionMatrix = transformation.getProjectionMatrix(
-                FOV, sceneWidth, sceneHeight, Z_NEAR, Z_FAR);
+                (float) Math.toRadians(FOV), sceneWidth, sceneHeight, Z_NEAR, Z_FAR);
         shaderProgram.setUniform("projectionMatrix", projectionMatrix);
         shaderProgram.setUniform("texture_sampler", 0);
         shaderProgram.setUniform("uBreakProgress", 0.0f);
         shaderProgram.setUniform("uAlpha", 1.0f);
+        shaderProgram.setUniform("uRenderPass", 0);
+        shaderProgram.setUniform("uFogDensity", 0.0f);
+        shaderProgram.setUniform("uSkyDarkness", 0.0f);
 
         Matrix4f viewMatrix = transformation.getViewMatrix(camera);
 
@@ -263,6 +326,7 @@ public class Renderer {
             Matrix4f modelViewMatrix = new Matrix4f(viewMatrix).mul(modelMatrix);
 
             shaderProgram.setUniform("modelViewMatrix", modelViewMatrix);
+            shaderProgram.setUniform("uModelMatrix", modelMatrix);
             shaderProgram.setUniform("colour", mesh.getColour());
             shaderProgram.setUniform("useColour", mesh.getTexture() != null ? 0 : 1);
 
@@ -281,7 +345,7 @@ public class Renderer {
     }
 
     public void clear() {
-        glClearColor(0f, 0f, 0f, 1f);
+        glClearColor(0.2f, 0.4f, 0.9f, 1f); // Sky blue
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
@@ -290,12 +354,13 @@ public class Renderer {
     public void renderChunksToTexture(Window window,
             Camera camera,
             Collection<Chunk> chunks,
-            game.voxel.world.TimeSystem timeSystem) {
+            game.voxel.world.TimeSystem timeSystem,
+            game.voxel.world.WeatherSystem weatherSystem) {
 
         shaderProgram.bind();
 
         Matrix4f projectionMatrix = transformation.getProjectionMatrix(
-                FOV, sceneWidth, sceneHeight, Z_NEAR, Z_FAR);
+                (float) Math.toRadians(FOV), sceneWidth, sceneHeight, Z_NEAR, Z_FAR);
         shaderProgram.setUniform("projectionMatrix", projectionMatrix);
 
         Matrix4f viewMatrix = transformation.getViewMatrix(camera);
@@ -305,31 +370,18 @@ public class Renderer {
         shaderProgram.setUniform("lightColor", timeSystem.getLightColor());
         shaderProgram.setUniform("ambientStrength", timeSystem.getAmbientStrength());
 
+        // Weather
+        shaderProgram.setUniform("uFogDensity", weatherSystem.getFogDensity());
+        shaderProgram.setUniform("uFogColor", timeSystem.getLightColor()); // Fog matches light color
+        shaderProgram.setUniform("uSkyDarkness", weatherSystem.getSkyDarkness());
+
         // Sampler binding for meshes
         shaderProgram.setUniform("texture_sampler", 0);
         shaderProgram.setUniform("uBreakProgress", 0.0f);
         shaderProgram.setUniform("uAlpha", 1.0f);
 
-        for (Chunk chunk : chunks) {
-            Mesh mesh = chunk.getMesh();
-            if (mesh != null) {
-                Matrix4f modelMatrix = new Matrix4f()
-                        .translate(chunk.getChunkX() * Chunk.SIZE_X, 0,
-                                chunk.getChunkZ() * Chunk.SIZE_Z);
-                Matrix4f modelViewMatrix = new Matrix4f(viewMatrix).mul(modelMatrix);
-                shaderProgram.setUniform("modelViewMatrix", modelViewMatrix);
-
-                shaderProgram.setUniform("colour", mesh.getColour());
-                shaderProgram.setUniform("useColour", mesh.getTexture() != null ? 0 : 1);
-
-                if (mesh.getTexture() != null) {
-                    glActiveTexture(GL_TEXTURE0);
-                    glBindTexture(GL_TEXTURE_2D, mesh.getTexture().getId());
-                }
-
-                mesh.render();
-            }
-        }
+        // Combined logic to avoid duplication
+        renderChunkMeshes(chunks, viewMatrix, camera);
 
         shaderProgram.unbind();
     }
@@ -337,13 +389,14 @@ public class Renderer {
     // Direct on-screen chunk rendering (used if no postprocess)
     public void renderChunks(Window window, Camera camera,
             Collection<Chunk> chunks,
-            game.voxel.world.TimeSystem timeSystem) {
+            game.voxel.world.TimeSystem timeSystem,
+            game.voxel.world.WeatherSystem weatherSystem) {
         handleResize(window);
 
         shaderProgram.bind();
 
         Matrix4f projectionMatrix = transformation.getProjectionMatrix(
-                FOV, window.getWidth(), window.getHeight(), Z_NEAR, Z_FAR);
+                (float) Math.toRadians(FOV), window.getWidth(), window.getHeight(), Z_NEAR, Z_FAR);
         shaderProgram.setUniform("projectionMatrix", projectionMatrix);
         Matrix4f viewMatrix = transformation.getViewMatrix(camera);
 
@@ -353,6 +406,11 @@ public class Renderer {
         shaderProgram.setUniform("lightDirection", timeSystem.getSunDirection());
         shaderProgram.setUniform("lightColor", timeSystem.getLightColor());
         shaderProgram.setUniform("ambientStrength", timeSystem.getAmbientStrength());
+
+        // Weather
+        shaderProgram.setUniform("uFogDensity", weatherSystem.getFogDensity());
+        shaderProgram.setUniform("uFogColor", timeSystem.getLightColor());
+        shaderProgram.setUniform("uSkyDarkness", weatherSystem.getSkyDarkness());
 
         // Ensure sampler is set
         shaderProgram.setUniform("texture_sampler", 0);
@@ -363,28 +421,40 @@ public class Renderer {
         shaderProgram.setUniform("uRenderPass", 0);
         glDisable(GL_BLEND);
         glDepthMask(true);
-        renderChunkMeshes(chunks, viewMatrix);
+        renderChunkMeshes(chunks, viewMatrix, camera);
 
         // Pass 2: Transparent
         shaderProgram.setUniform("uRenderPass", 1);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDepthMask(false); // No depth writing for transparency
-        renderChunkMeshes(chunks, viewMatrix);
+        renderChunkMeshes(chunks, viewMatrix, camera);
 
         glDepthMask(true);
         shaderProgram.unbind();
     }
 
-    private void renderChunkMeshes(Collection<Chunk> chunks, Matrix4f viewMatrix) {
+    private void renderChunkMeshes(Collection<Chunk> chunks, Matrix4f viewMatrix, Camera camera) {
+        org.joml.Vector3f playerPos = camera.getPosition();
         for (Chunk chunk : chunks) {
-            Mesh mesh = chunk.getMesh();
+            float dx = chunk.getChunkX() * Chunk.SIZE_X + 8 - playerPos.x;
+            float dz = chunk.getChunkZ() * Chunk.SIZE_Z + 8 - playerPos.z;
+            float distSq = dx * dx + dz * dz;
+
+            int lod = 0;
+            if (distSq > 160 * 160)
+                lod = 2;
+            else if (distSq > 80 * 80)
+                lod = 1;
+
+            Mesh mesh = chunk.getMesh(lod);
             if (mesh != null) {
                 Matrix4f modelMatrix = new Matrix4f()
                         .translate(chunk.getChunkX() * Chunk.SIZE_X, 0,
                                 chunk.getChunkZ() * Chunk.SIZE_Z);
                 Matrix4f modelViewMatrix = new Matrix4f(viewMatrix).mul(modelMatrix);
                 shaderProgram.setUniform("modelViewMatrix", modelViewMatrix);
+                shaderProgram.setUniform("uModelMatrix", modelMatrix);
 
                 shaderProgram.setUniform("colour", mesh.getColour());
                 shaderProgram.setUniform("useColour", mesh.getTexture() != null ? 0 : 1);

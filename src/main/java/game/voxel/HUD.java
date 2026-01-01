@@ -5,6 +5,7 @@ import engine.entity.Entity;
 import engine.raster.Mesh;
 import engine.raster.Texture;
 import engine.io.Window;
+import game.voxel.entity.ItemEntity;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -12,6 +13,7 @@ import org.joml.Vector4f;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL30.*;
 
@@ -152,8 +154,40 @@ public class HUD {
         shaderProgram.unbind();
     }
 
+    public void renderLoadingScreen(Window window, String text) {
+        shaderProgram.bind();
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+
+        Matrix4f ortho = new Matrix4f().ortho2D(
+                0, window.getWidth(),
+                window.getHeight(), 0);
+        shaderProgram.setUniform("projectionMatrix", ortho);
+
+        // Fullscreen dim background
+        Matrix4f bgMatrix = new Matrix4f()
+                .translate(window.getWidth() / 2f, window.getHeight() / 2f, 0)
+                .scale(window.getWidth(), window.getHeight(), 1);
+        shaderProgram.setUniform("modelMatrix", bgMatrix);
+        shaderProgram.setUniform("colour", new Vector4f(0f, 0f, 0f, 0.9f)); // Darker for loading
+        shaderProgram.setUniform("hasTexture", 0);
+        quadMesh.render();
+
+        // Render centered text
+        renderTextCentered(text, window.getWidth() / 2f, window.getHeight() / 2f, 10f);
+
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+        shaderProgram.unbind();
+    }
+
     /**
      * Renders a simple main menu overlay: dimmed background and three buttons
+     * 
      * (Start, Options, Quit). The currently selected button is highlighted.
      */
     public void renderMainMenu(Window window, int selectedIndex) {
@@ -219,7 +253,47 @@ public class HUD {
     // Minimal 5x7 text rendering for menu
     // --------------------------
 
-    private void renderTextCentered(String text, float centerX, float centerY, float scale) {
+    public void bind() {
+        shaderProgram.bind();
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+
+        // Default orthographic projection
+        int[] winWidth = new int[1];
+        int[] winHeight = new int[1];
+        glfwGetWindowSize(glfwGetCurrentContext(), winWidth, winHeight);
+
+        Matrix4f ortho = new Matrix4f().ortho2D(
+                0, winWidth[0],
+                winHeight[0], 0);
+        shaderProgram.setUniform("projectionMatrix", ortho);
+    }
+
+    public void unbind() {
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+        shaderProgram.unbind();
+    }
+
+    public void renderRect(float x, float y, float w, float h, Vector4f color) {
+        Matrix4f modelMatrix = new Matrix4f()
+                .translate(x, y, 0)
+                .scale(w, h, 1);
+        shaderProgram.setUniform("modelMatrix", modelMatrix);
+        shaderProgram.setUniform("colour", color);
+        shaderProgram.setUniform("hasTexture", 0);
+        quadMesh.render();
+    }
+
+    public void renderTextCentered(String text, float centerX, float centerY, float scale) {
+        renderTextCentered(text, centerX, centerY, scale, new Vector4f(1, 1, 1, 1));
+    }
+
+    public void renderTextCentered(String text, float centerX, float centerY, float scale, Vector4f color) {
         if (text == null || text.isEmpty())
             return;
 
@@ -248,7 +322,7 @@ public class HUD {
                             .translate(x, y, 0)
                             .scale(scale, scale, 1);
                     shaderProgram.setUniform("modelMatrix", m);
-                    shaderProgram.setUniform("colour", new Vector4f(1, 1, 1, 1));
+                    shaderProgram.setUniform("colour", color);
                     shaderProgram.setUniform("hasTexture", 0);
                     quadMesh.render();
                 }
@@ -276,6 +350,28 @@ public class HUD {
                         "#...#",
                 };
                 break;
+            case 'B':
+                pattern = new String[] {
+                        "####.",
+                        "#...#",
+                        "#...#",
+                        "####.",
+                        "#...#",
+                        "#...#",
+                        "####.",
+                };
+                break;
+            case 'C':
+                pattern = new String[] {
+                        ".####",
+                        "#....",
+                        "#....",
+                        "#....",
+                        "#....",
+                        "#....",
+                        ".####",
+                };
+                break;
             case 'D':
                 pattern = new String[] {
                         "####.",
@@ -298,6 +394,72 @@ public class HUD {
                         "#####",
                 };
                 break;
+            case 'F':
+                pattern = new String[] {
+                        "#####",
+                        "#....",
+                        "#....",
+                        "####.",
+                        "#....",
+                        "#....",
+                        "#....",
+                };
+                break;
+            case 'G':
+                pattern = new String[] {
+                        ".####",
+                        "#....",
+                        "#....",
+                        "#.###",
+                        "#...#",
+                        "#...#",
+                        ".####",
+                };
+                break;
+            case 'H':
+                pattern = new String[] {
+                        "#...#",
+                        "#...#",
+                        "#...#",
+                        "#####",
+                        "#...#",
+                        "#...#",
+                        "#...#",
+                };
+                break;
+            case 'I':
+                pattern = new String[] {
+                        "#####",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "#####",
+                };
+                break;
+            case 'J':
+                pattern = new String[] {
+                        "#####",
+                        "....#",
+                        "....#",
+                        "....#",
+                        "#...#",
+                        "#...#",
+                        ".###.",
+                };
+                break;
+            case 'K':
+                pattern = new String[] {
+                        "#...#",
+                        "#..#.",
+                        "#.#..",
+                        "##...",
+                        "#.#..",
+                        "#..#.",
+                        "#...#",
+                };
+                break;
             case 'L':
                 pattern = new String[] {
                         "#....",
@@ -307,6 +469,28 @@ public class HUD {
                         "#....",
                         "#....",
                         "#####",
+                };
+                break;
+            case 'M':
+                pattern = new String[] {
+                        "#...#",
+                        "##.##",
+                        "#.u.#",
+                        "#...#",
+                        "#...#",
+                        "#...#",
+                        "#...#",
+                };
+                break;
+            case 'N':
+                pattern = new String[] {
+                        "#...#",
+                        "##..#",
+                        "#.#.#",
+                        "#..##",
+                        "#...#",
+                        "#...#",
+                        "#...#",
                 };
                 break;
             case 'O':
@@ -386,6 +570,17 @@ public class HUD {
                         ".###.",
                 };
                 break;
+            case 'V':
+                pattern = new String[] {
+                        "#...#",
+                        "#...#",
+                        "#...#",
+                        "#...#",
+                        "#...#",
+                        ".#.#.",
+                        "..#..",
+                };
+                break;
             case 'W':
                 pattern = new String[] {
                         "#...#",
@@ -397,15 +592,213 @@ public class HUD {
                         "#...#",
                 };
                 break;
-            case 'I':
+            case 'X':
+                pattern = new String[] {
+                        "#...#",
+                        "#...#",
+                        ".#.#.",
+                        "..#..",
+                        ".#.#.",
+                        "#...#",
+                        "#...#",
+                };
+                break;
+            case 'Y':
+                pattern = new String[] {
+                        "#...#",
+                        "#...#",
+                        ".#.#.",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                };
+                break;
+            case 'Z':
                 pattern = new String[] {
                         "#####",
+                        "....#",
+                        "...#.",
                         "..#..",
-                        "..#..",
-                        "..#..",
-                        "..#..",
-                        "..#..",
+                        ".#...",
+                        "#....",
                         "#####",
+                };
+                break;
+            case '>':
+                pattern = new String[] {
+                        "#....",
+                        ".#...",
+                        "..#..",
+                        "...#.",
+                        "..#..",
+                        ".#...",
+                        "#....",
+                };
+                break;
+            case '<':
+                pattern = new String[] {
+                        "....#",
+                        "...#.",
+                        "..#..",
+                        ".#...",
+                        "..#..",
+                        "...#.",
+                        "....#",
+                };
+                break;
+            case '/':
+                pattern = new String[] {
+                        "....#",
+                        "...#.",
+                        "...#.",
+                        "..#..",
+                        ".#...",
+                        ".#...",
+                        "#....",
+                };
+                break;
+            case ':':
+                pattern = new String[] {
+                        ".....",
+                        "..#..",
+                        "..#..",
+                        ".....",
+                        "..#..",
+                        "..#..",
+                        ".....",
+                };
+                break;
+            case '0':
+                pattern = new String[] {
+                        ".###.",
+                        "#..##",
+                        "#.###",
+                        "##.##",
+                        "###.#",
+                        "##..#",
+                        ".###.",
+                };
+                break;
+            case '1':
+                pattern = new String[] {
+                        "..#..",
+                        ".##..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        ".###.",
+                };
+                break;
+            case '2':
+                pattern = new String[] {
+                        ".###.",
+                        "#...#",
+                        "....#",
+                        ".###.",
+                        "#....",
+                        "#....",
+                        "#####",
+                };
+                break;
+            case '3':
+                pattern = new String[] {
+                        "#####",
+                        "....#",
+                        "..##.",
+                        "....#",
+                        "....#",
+                        "#...#",
+                        ".###.",
+                };
+                break;
+            case '4':
+                pattern = new String[] {
+                        "#...#",
+                        "#...#",
+                        "#...#",
+                        "#####",
+                        "....#",
+                        "....#",
+                        "....#",
+                };
+                break;
+            case '5':
+                pattern = new String[] {
+                        "#####",
+                        "#....",
+                        "####.",
+                        "....#",
+                        "....#",
+                        "#...#",
+                        ".###.",
+                };
+                break;
+            case '6':
+                pattern = new String[] {
+                        ".###.",
+                        "#....",
+                        "####.",
+                        "#...#",
+                        "#...#",
+                        "#...#",
+                        ".###.",
+                };
+                break;
+            case '7':
+                pattern = new String[] {
+                        "#####",
+                        "....#",
+                        "...#.",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                };
+                break;
+            case '8':
+                pattern = new String[] {
+                        ".###.",
+                        "#...#",
+                        "#...#",
+                        ".###.",
+                        "#...#",
+                        "#...#",
+                        ".###.",
+                };
+                break;
+            case '9':
+                pattern = new String[] {
+                        ".###.",
+                        "#...#",
+                        "#...#",
+                        ".####",
+                        "....#",
+                        "....#",
+                        ".###.",
+                };
+                break;
+            case '%':
+                pattern = new String[] {
+                        "#...#",
+                        ".....",
+                        "..#..",
+                        ".#.#.",
+                        "..#..",
+                        ".....",
+                        "#...#",
+                };
+                break;
+            case '|':
+                pattern = new String[] {
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
+                        "..#..",
                 };
                 break;
             default:

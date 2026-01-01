@@ -21,6 +21,10 @@ public class Mesh {
     private final Vector3f colour;
     private Texture texture;
 
+    public Mesh(MeshData data) {
+        this(data.positions, data.textCoords, data.normals, data.indices);
+    }
+
     public Mesh(float[] positions, float[] textCoords, float[] normals, int[] indices) {
         this.colour = new Vector3f(1, 1, 1);
         FloatBuffer posBuffer = null;

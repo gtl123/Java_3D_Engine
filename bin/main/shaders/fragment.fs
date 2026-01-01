@@ -19,8 +19,15 @@ uniform int uRenderPass; // 0: Opaque, 1: Transparent
 
 uniform float uBreakProgress; // 0 to 1
 
+// Weather
+uniform float uFogDensity;
+uniform vec3 uFogColor;
+uniform float uSkyDarkness;
+
 void main()
 {
+    vec3 finalLightColor = lightColor * (1.0 - uSkyDarkness * 0.5);
+    
     vec4 textureColor;
     // Generic UV calculation for all branches
     vec3 absNormal = abs(worldNormal);
@@ -34,7 +41,7 @@ void main()
     }
 
     if ( useColour == 1 ) {
-        fragColor = vec4(colour, 1.0);
+        fragColor = vec4(colour * (1.0 - uSkyDarkness * 0.5), 1.0);
     } else {
         // Tile the UVs (fract gives us 0-1 per block)
         vec2 tiledUV = fract(uv);
@@ -68,11 +75,11 @@ void main()
         }
         
         // Lighting calculation
-        vec3 ambient = ambientStrength * lightColor;
+        vec3 ambient = ambientStrength * finalLightColor;
         vec3 norm = normalize(worldNormal);
         vec3 lightDir = normalize(-lightDirection);
         float diff = max(dot(norm, lightDir), 0.0);
-        vec3 diffuse = diff * lightColor;
+        vec3 diffuse = diff * finalLightColor;
         vec3 lighting = ambient + diffuse;
         
         fragColor = textureColor * vec4(lighting, finalAlpha);
@@ -98,7 +105,14 @@ void main()
     }
 
     // Apply global alpha
-    if (uAlpha > 0.0) {
-        fragColor.a *= uAlpha;
+    fragColor.a *= uAlpha;
+
+    // Apply Fog
+    if (uFogDensity > 0.0) {
+        float dist = length(mvVertexPos);
+        float fogFactor = 1.0 - exp(-pow(dist * uFogDensity, 2.0));
+        fogFactor = clamp(fogFactor, 0.0, 1.0);
+        // Use ambient-shifted light color for fog
+        fragColor.rgb = mix(fragColor.rgb, lightColor * (1.0 - clamp(uSkyDarkness, 0.0, 1.0) * 0.5), fogFactor);
     }
 }

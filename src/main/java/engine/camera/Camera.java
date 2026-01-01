@@ -78,8 +78,10 @@ public class Camera {
         rotation.add(dx, dy, dz);
 
         // Clamp pitch to prevent flipping upside-down
-        if (rotation.x > 89.0f) rotation.x = 89.0f;
-        if (rotation.x < -89.0f) rotation.x = -89.0f;
+        if (rotation.x > 89.0f)
+            rotation.x = 89.0f;
+        if (rotation.x < -89.0f)
+            rotation.x = -89.0f;
     }
 
     // --------------------------
@@ -87,20 +89,36 @@ public class Camera {
     // --------------------------
 
     public void update(float interval,
-                       ChunkManager chunkManager,
-                       boolean jump, boolean moveForward, boolean moveBack,
-                       boolean moveLeft, boolean moveRight,
-                       boolean moveUp, boolean moveDown) {
+            ChunkManager chunkManager,
+            boolean jump, boolean moveForward, boolean moveBack,
+            boolean moveLeft, boolean moveRight,
+            boolean moveUp, boolean moveDown) {
 
         float yaw = (float) Math.toRadians(rotation.y);
         float dx = 0, dy = 0, dz = 0;
 
-        if (moveForward) { dx -= Math.sin(yaw); dz -= Math.cos(yaw); }
-        if (moveBack)    { dx += Math.sin(yaw); dz += Math.cos(yaw); }
-        if (moveLeft)    { dx -= Math.cos(yaw); dz += Math.sin(yaw); }
-        if (moveRight)   { dx += Math.cos(yaw); dz -= Math.sin(yaw); }
-        if (moveUp)      { dy += 1.0f; }
-        if (moveDown)    { dy -= 1.0f; }
+        if (moveForward) {
+            dx -= Math.sin(yaw);
+            dz -= Math.cos(yaw);
+        }
+        if (moveBack) {
+            dx += Math.sin(yaw);
+            dz += Math.cos(yaw);
+        }
+        if (moveLeft) {
+            dx -= Math.cos(yaw);
+            dz += Math.sin(yaw);
+        }
+        if (moveRight) {
+            dx += Math.cos(yaw);
+            dz -= Math.sin(yaw);
+        }
+        if (moveUp) {
+            dy += 1.0f;
+        }
+        if (moveDown) {
+            dy -= 1.0f;
+        }
 
         // Normalize horizontal speed
         if (dx != 0 || dz != 0) {
@@ -150,7 +168,8 @@ public class Camera {
         onGround = false;
         if (checkCollision(chunkManager)) {
             boundingBox.move(0, -velocity.y * interval, 0);
-            if (velocity.y < 0) onGround = true;
+            if (velocity.y < 0)
+                onGround = true;
             velocity.y = 0;
         }
         position.y = boundingBox.min.y;
@@ -184,7 +203,7 @@ public class Camera {
     private Block getBlock(ChunkManager cm, int x, int y, int z) {
         int cx = x >> 4;
         int cz = z >> 4;
-        String key = ChunkManager.getChunkKey(cx, cz);
+        long key = ChunkManager.getChunkKey(cx, cz);
         Chunk c = cm.getChunks().get(key);
         if (c != null) {
             int lx = x & 15;
