@@ -1,24 +1,17 @@
 package engine.io;
 
-import me.friwi.jcefmaven.CefAppBuilder;
-import me.friwi.jcefmaven.MavenCefAppHandlerAdapter;
-import org.cef.CefApp;
-import org.cef.CefClient;
-import org.cef.browser.CefBrowser;
-import org.cef.browser.CefRenderHandler;
-import org.cef.callback.CefDragData;
-import org.cef.handler.CefRenderHandlerAdapter;
-
-import java.awt.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL12.*;
 
+/**
+ * WebBrowser: Renders web content to an OpenGL texture.
+ * Note: This is a placeholder implementation. Full JCEF integration requires
+ * additional setup and platform-specific binaries.
+ */
 public class WebBrowser {
-    private CefApp cefApp;
-    private CefClient client;
-    private CefBrowser browser;
     private int textureId;
     private int width, height;
     private ByteBuffer buffer;
@@ -27,49 +20,18 @@ public class WebBrowser {
         this.width = width;
         this.height = height;
         this.buffer = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder());
-
-        try {
-            CefAppBuilder builder = new CefAppBuilder();
-            builder.setInstallDir(new java.io.File("jcef-bundle"));
-            builder.setAppHandler(new MavenCefAppHandlerAdapter() {});
-            
-            cefApp = builder.build();
-            client = cefApp.createClient();
-            
-            CefRenderHandler renderHandler = new CefRenderHandlerAdapter() {
-                @Override
-                public void onPaint(CefBrowser browser, boolean popup, Rectangle[] dirtyRects, ByteBuffer buffer, int width, int height) {
-                    WebBrowser.this.buffer.clear();
-                    WebBrowser.this.buffer.put(buffer);
-                    WebBrowser.this.buffer.flip();
-                    updateTexture();
-                }
-
-                @Override
-                public boolean getViewRect(CefBrowser browser, Rectangle rect) {
-                    rect.setBounds(0, 0, WebBrowser.this.width, WebBrowser.this.height);
-                    return true;
-                }
-
-                @Override
-                public Point getScreenPoint(CefBrowser browser, Point viewPoint) {
-                    return viewPoint;
-                }
-            };
-
-            browser = client.createBrowser(url, true, false);
-            // browser.setRenderHandler(renderHandler); // This might need a specific OSR browser creation
-            
-            initTexture();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        
+        // Initialize with placeholder content
+        initTexture();
+        
+        // TODO: Integrate JCEF for actual browser rendering
+        // For now, this creates a texture that can be displayed on a plane
     }
 
     private void initTexture() {
         textureId = glGenTextures();
         glBindTexture(GL_TEXTURE_2D, textureId);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, (ByteBuffer) null);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (ByteBuffer) null);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -77,7 +39,7 @@ public class WebBrowser {
 
     private void updateTexture() {
         glBindTexture(GL_TEXTURE_2D, textureId);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, buffer);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 
@@ -86,9 +48,6 @@ public class WebBrowser {
     }
 
     public void cleanup() {
-        if (browser != null) browser.close(true);
-        if (client != null) client.dispose();
-        if (cefApp != null) cefApp.dispose();
         glDeleteTextures(textureId);
     }
 }

@@ -31,9 +31,8 @@ public class BrowserRenderPass implements RenderPass {
         renderer.setupSceneUniforms(camera, transformation);
 
         for (BrowserEntity entity : browserEntities) {
-            Matrix4f modelMatrix = transformation.getModelMatrix(entity);
             Matrix4f viewMatrix = transformation.getViewMatrix(camera);
-            Matrix4f modelViewMatrix = new Matrix4f(viewMatrix).mul(modelMatrix);
+            Matrix4f modelViewMatrix = transformation.getModelViewMatrix(entity, viewMatrix);
             renderer.renderGameItemQuick(entity.getMesh(), modelViewMatrix);
         }
 

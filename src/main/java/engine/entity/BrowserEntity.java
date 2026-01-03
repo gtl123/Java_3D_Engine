@@ -7,23 +7,26 @@ import engine.raster.Texture;
 
 public class BrowserEntity extends Entity {
     private WebBrowser browser;
-    private Mesh mesh;
 
     public BrowserEntity(String url, float width, float height) {
-        super();
+        super(PlaneMeshBuilder.createPlane(width, height));
         this.browser = new WebBrowser(url, 1024, 1024);
-        this.mesh = PlaneMeshBuilder.createPlane(width, height);
-        // We need a way to set the texture ID directly or wrap it in a Texture object
+        
+        // Set the browser texture on the mesh
         Texture texture = new Texture(browser.getTextureId());
-        this.mesh.setTexture(texture);
+        this.getMesh().setTexture(texture);
     }
 
-    public Mesh getMesh() {
-        return mesh;
+    public void setPosition(float x, float y, float z) {
+        this.setLocalPosition(x, y, z);
+    }
+
+    public void setRotation(float x, float y, float z) {
+        this.setLocalRotation(x, y, z);
     }
 
     public void cleanup() {
         browser.cleanup();
-        mesh.cleanup();
+        getMesh().cleanup();
     }
 }

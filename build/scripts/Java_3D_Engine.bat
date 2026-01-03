@@ -70,11 +70,11 @@ goto fail
 :execute
 @rem Setup the command line
 
-set CLASSPATH=%APP_HOME%\lib\Java_3D_Engine-1.0-SNAPSHOT.jar;%APP_HOME%\lib\lwjgl-assimp-3.3.3.jar;%APP_HOME%\lib\lwjgl-assimp-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-glfw-3.3.3.jar;%APP_HOME%\lib\lwjgl-glfw-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-nfd-3.3.3.jar;%APP_HOME%\lib\lwjgl-nfd-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-openal-3.3.3.jar;%APP_HOME%\lib\lwjgl-openal-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-opengl-3.3.3.jar;%APP_HOME%\lib\lwjgl-opengl-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-stb-3.3.3.jar;%APP_HOME%\lib\lwjgl-stb-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-3.3.3.jar;%APP_HOME%\lib\lwjgl-3.3.3-natives-windows.jar;%APP_HOME%\lib\joml-1.10.5.jar
+set CLASSPATH=%APP_HOME%\lib\Java_3D_Engine-1.0-SNAPSHOT.jar;%APP_HOME%\lib\lwjgl-assimp-3.3.3.jar;%APP_HOME%\lib\lwjgl-assimp-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-glfw-3.3.3.jar;%APP_HOME%\lib\lwjgl-glfw-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-nfd-3.3.3.jar;%APP_HOME%\lib\lwjgl-nfd-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-openal-3.3.3.jar;%APP_HOME%\lib\lwjgl-openal-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-opengl-3.3.3.jar;%APP_HOME%\lib\lwjgl-opengl-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-stb-3.3.3.jar;%APP_HOME%\lib\lwjgl-stb-3.3.3-natives-windows.jar;%APP_HOME%\lib\lwjgl-3.3.3.jar;%APP_HOME%\lib\lwjgl-3.3.3-natives-windows.jar;%APP_HOME%\lib\joml-1.10.5.jar;%APP_HOME%\lib\jcefmaven-110.0.25.1.jar;%APP_HOME%\lib\jcef-api-jcef-87476e9+cef-110.0.25+g75b1c96+chromium-110.0.5481.78.jar;%APP_HOME%\lib\commons-compress-1.21.jar;%APP_HOME%\lib\gson-2.10.jar;%APP_HOME%\lib\jogl-all-v2.4.0-rc-20210111.jar;%APP_HOME%\lib\gluegen-rt-v2.4.0-rc-20210111.jar
 
 
 @rem Execute Java_3D_Engine
-"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %JAVA_3_D_ENGINE_OPTS%  -classpath "%CLASSPATH%" game.voxel.Main %*
+"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %JAVA_3_D_ENGINE_OPTS%  -classpath "%CLASSPATH%" game.Main %*
 
 :end
 @rem End local scope for the variables with windows NT shell

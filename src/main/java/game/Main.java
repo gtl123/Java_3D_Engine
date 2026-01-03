@@ -23,7 +23,7 @@ public class Main {
                     .filter(p -> p.getFileName().toString().endsWith(".dat"))
                     .map(p -> p.getFileName().toString().replace(".dat", ""))
                     .sorted()
-                    .toList();
+                    .collect(java.util.stream.Collectors.toList());
         }
     }
 

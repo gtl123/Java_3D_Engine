@@ -1,0 +1,33 @@
+#version 400
+
+layout (vertices = 3) out;
+
+in vec2 outTexCoord[];
+in vec3 mvVertexNormal[];
+in vec3 mvVertexPos[];
+in vec3 worldPos[];
+in vec3 worldNormal[];
+
+out vec2 tcsTexCoord[];
+out vec3 tcsVertexNormal[];
+out vec3 tcsVertexPos[];
+out vec3 tcsWorldPos[];
+out vec3 tcsWorldNormal[];
+
+void main()
+{
+    if (gl_InvocationID == 0)
+    {
+        gl_TessLevelInner[0] = 4.0;
+        gl_TessLevelOuter[0] = 4.0;
+        gl_TessLevelOuter[1] = 4.0;
+        gl_TessLevelOuter[2] = 4.0;
+    }
+
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+    tcsTexCoord[gl_InvocationID] = outTexCoord[gl_InvocationID];
+    tcsVertexNormal[gl_InvocationID] = mvVertexNormal[gl_InvocationID];
+    tcsVertexPos[gl_InvocationID] = mvVertexPos[gl_InvocationID];
+    tcsWorldPos[gl_InvocationID] = worldPos[gl_InvocationID];
+    tcsWorldNormal[gl_InvocationID] = worldNormal[gl_InvocationID];
+}
