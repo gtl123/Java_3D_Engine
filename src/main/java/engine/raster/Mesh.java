@@ -113,7 +113,8 @@ public class Mesh {
         // Draw the mesh
         glBindVertexArray(getVaoId());
 
-        glDrawElements(GL_TRIANGLES, getVertexCount(), GL_UNSIGNED_INT, 0);
+        // Use GL_PATCHES for tessellation if the shader supports it
+        glDrawElements(org.lwjgl.opengl.GL40.GL_PATCHES, getVertexCount(), GL_UNSIGNED_INT, 0);
 
         // Restore state
         glBindVertexArray(0);

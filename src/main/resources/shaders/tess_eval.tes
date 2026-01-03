@@ -1,0 +1,38 @@
+#version 400
+
+layout (triangles, equal_spacing, ccw) in;
+
+in vec2 tcsTexCoord[];
+in vec3 tcsVertexNormal[];
+in vec3 tcsVertexPos[];
+in vec3 tcsWorldPos[];
+in vec3 tcsWorldNormal[];
+
+out vec2 outTexCoord;
+out vec3 mvVertexNormal;
+out vec3 mvVertexPos;
+out vec3 worldPos;
+out vec3 worldNormal;
+
+uniform mat4 projectionMatrix;
+
+vec2 interpolate2D(vec2 v0, vec2 v1, vec2 v2)
+{
+    return gl_TessCoord.x * v0 + gl_TessCoord.y * v1 + gl_TessCoord.z * v2;
+}
+
+vec3 interpolate3D(vec3 v0, vec3 v1, vec3 v2)
+{
+    return gl_TessCoord.x * v0 + gl_TessCoord.y * v1 + gl_TessCoord.z * v2;
+}
+
+void main()
+{
+    outTexCoord = interpolate2D(tcsTexCoord[0], tcsTexCoord[1], tcsTexCoord[2]);
+    mvVertexNormal = interpolate3D(tcsVertexNormal[0], tcsVertexNormal[1], tcsVertexNormal[2]);
+    mvVertexPos = interpolate3D(tcsVertexPos[0], tcsVertexPos[1], tcsVertexPos[2]);
+    worldPos = interpolate3D(tcsWorldPos[0], tcsWorldPos[1], tcsWorldPos[2]);
+    worldNormal = interpolate3D(tcsWorldNormal[0], tcsWorldNormal[1], tcsWorldNormal[2]);
+
+    gl_Position = projectionMatrix * vec4(mvVertexPos, 1.0);
+}

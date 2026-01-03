@@ -19,6 +19,8 @@ public class ShaderProgram {
     private int vertexShaderId;
     private int fragmentShaderId;
     private int computeShaderId;
+    private int tessControlShaderId;
+    private int tessEvalShaderId;
     private final Map<String, Integer> uniforms;
 
     public ShaderProgram() throws Exception {
@@ -39,6 +41,14 @@ public class ShaderProgram {
 
     public void createComputeShader(String shaderCode) throws Exception {
         computeShaderId = createShader(shaderCode, GL_COMPUTE_SHADER);
+    }
+
+    public void createTessControlShader(String shaderCode) throws Exception {
+        tessControlShaderId = createShader(shaderCode, org.lwjgl.opengl.GL40.GL_TESS_CONTROL_SHADER);
+    }
+
+    public void createTessEvalShader(String shaderCode) throws Exception {
+        tessEvalShaderId = createShader(shaderCode, org.lwjgl.opengl.GL40.GL_TESS_EVALUATION_SHADER);
     }
 
     protected int createShader(String shaderCode, int shaderType) throws Exception {
@@ -80,6 +90,12 @@ public class ShaderProgram {
         }
         if (computeShaderId != 0) {
             glDetachShader(programId, computeShaderId);
+        }
+        if (tessControlShaderId != 0) {
+            glDetachShader(programId, tessControlShaderId);
+        }
+        if (tessEvalShaderId != 0) {
+            glDetachShader(programId, tessEvalShaderId);
         }
 
         glValidateProgram(programId);

@@ -9,6 +9,7 @@ import engine.io.MousePicker;
 import engine.io.Window;
 import engine.camera.Camera;
 import engine.entity.Entity;
+import engine.entity.BrowserEntity;
 import engine.physics.AABB;
 import game.voxel.world.TimeSystem;
 import game.voxel.world.WeatherSystem;
@@ -52,6 +53,7 @@ public class VoxelGame implements IGameLogic {
 
     private PlayerController player;
     private List<ItemEntity> itemEntities = new ArrayList<>();
+    private List<BrowserEntity> browserEntities = new ArrayList<>();
     private float dropCooldown = 0.0f;
 
     // World identity/state for saving
@@ -133,6 +135,22 @@ public class VoxelGame implements IGameLogic {
             player.getCamera().setRotation(35, 45, 0);
             menuManager.switchTo(MenuManager.MenuState.MAIN_MENU);
             chunkManager.loadChunksAround(0, 0, 6); // 13x13 area
+            
+            // Create stacked browser pages for the menu
+            BrowserEntity mainMenuBrowser = new BrowserEntity("https://3000-i36dxtoer9b9r2w1arbem-29b75f94.us2.manus.computer/", 2.0f, 1.5f);
+            mainMenuBrowser.setPosition(0, 120, -2.0f);
+            mainMenuBrowser.setRotation(0, 0, 0);
+            browserEntities.add(mainMenuBrowser);
+            
+            BrowserEntity worldSelectBrowser = new BrowserEntity("https://3000-i36dxtoer9b9r2w1arbem-29b75f94.us2.manus.computer/world-select", 2.0f, 1.5f);
+            worldSelectBrowser.setPosition(0, 120, -2.5f);
+            worldSelectBrowser.setRotation(0, 0, 0);
+            browserEntities.add(worldSelectBrowser);
+            
+            BrowserEntity settingsBrowser = new BrowserEntity("https://3000-i36dxtoer9b9r2w1arbem-29b75f94.us2.manus.computer/settings", 2.0f, 1.5f);
+            settingsBrowser.setPosition(0, 120, -3.0f);
+            settingsBrowser.setRotation(0, 0, 0);
+            browserEntities.add(settingsBrowser);
         } else {
             // If passed a real world, start playing
             menuManager.switchTo(MenuManager.MenuState.NONE);
@@ -155,6 +173,8 @@ public class VoxelGame implements IGameLogic {
         renderSystem.addPass(new WeatherRenderPass(renderer, weatherParticleSystem,
                 weatherSystem, player.getCamera(),
                 transformation));
+        
+        renderSystem.addPass(new BrowserRenderPass(renderer, transformation, player.getCamera(), browserEntities));
 
         selectionPass = new SelectionRenderPass(renderer, player.getCamera(), chunkManager, menuManager);
         renderSystem.addPass(selectionPass);

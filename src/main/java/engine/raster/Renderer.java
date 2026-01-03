@@ -184,6 +184,8 @@ public class Renderer {
     private void setupSceneShader() throws Exception {
         shaderProgram = new ShaderProgram();
         shaderProgram.createVertexShader(Utils.loadResource("shaders/vertex.vs"));
+        shaderProgram.createTessControlShader(Utils.loadResource("shaders/tess_control.tcs"));
+        shaderProgram.createTessEvalShader(Utils.loadResource("shaders/tess_eval.tes"));
         shaderProgram.createFragmentShader(Utils.loadResource("shaders/fragment.fs"));
         shaderProgram.link();
 
@@ -599,6 +601,7 @@ public class Renderer {
         screenQuadShaderProgram.createFragmentShader(Utils.loadResource("shaders/screen_quad.fs"));
         screenQuadShaderProgram.link();
         screenQuadShaderProgram.createUniform("screenTexture");
+        screenQuadShaderProgram.createUniform("inverseScreenSize");
 
         // Create Quad VAO in NDC
         float[] quadVertices = {
@@ -630,6 +633,7 @@ public class Renderer {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, rayTracer.getOutputTextureId());
         screenQuadShaderProgram.setUniform("screenTexture", 0);
+        screenQuadShaderProgram.setUniform("inverseScreenSize", new org.joml.Vector2f(1.0f / sceneWidth, 1.0f / sceneHeight));
 
         glBindVertexArray(screenQuadVAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
