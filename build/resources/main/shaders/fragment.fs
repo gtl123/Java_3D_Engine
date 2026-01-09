@@ -13,6 +13,7 @@ uniform vec3 colour;
 uniform int useColour;
 uniform vec3 lightDirection;
 uniform vec3 lightColor;
+uniform vec3 cameraPos;
 uniform float ambientStrength;
 uniform float uAlpha;
 uniform int uRenderPass; // 0: Opaque, 1: Transparent
@@ -25,12 +26,12 @@ uniform vec3 uFogColor;
 uniform float uSkyDarkness;
 
 // Realistic Lighting Constants
-const float specularStrength = 0.5;
-const float shininess = 32.0;
+const float specularStrength = 0.6;
+const float shininess = 64.0;
 
 void main()
 {
-    vec3 finalLightColor = lightColor * (1.0 - uSkyDarkness * 0.5);
+    vec3 finalLightColor = lightColor * (1.0 - uSkyDarkness * 0.3);
     
     vec4 textureColor;
     // Generic UV calculation for all branches
@@ -85,28 +86,27 @@ void main()
     vec3 norm = normalize(worldNormal);
     vec3 lightDir = normalize(-lightDirection);
     
-    // Ambient
-    vec3 ambient = ambientStrength * finalLightColor;
+    // Ambient (improved with sky darkness)
+    vec3 ambient = ambientStrength * finalLightColor * 0.8;
     
-    // Diffuse
+    // Diffuse (Lambertian)
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * finalLightColor;
     
-    // Specular (Blinn-Phong)
-    // In view space, camera is at (0,0,0)
-    vec3 viewDir = normalize(-mvVertexPos);
-    // We need lightDir in view space for specular calculation in view space
-    // For simplicity, let's use world space for everything if we can
-    // But mvVertexPos is in view space.
-    // Let's just use a simple Phong-like specular for now
-    vec3 reflectDir = reflect(-lightDir, norm);
-    // This is mixed world/view space, which is wrong.
-    // Let's stick to diffuse + ambient for now but make it look better with gamma correction
+    // Specular (Blinn-Phong) - improved
+    vec3 viewDir = normalize(cameraPos - worldPos);
+    vec3 halfDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(norm, halfDir), 0.0), shininess);
+    vec3 specular = specularStrength * spec * finalLightColor;
     
-    vec3 lighting = ambient + diffuse;
+    // Combine lighting
+    vec3 lighting = ambient + diffuse + specular * 0.3;
     
+    // Apply lighting to texture
     fragColor = textureColor * vec4(lighting, 1.0);
-    fragColor.rgb *= (1.0 - uSkyDarkness * 0.5);
+    
+    // Apply sky darkness modulation
+    fragColor.rgb *= (1.0 - uSkyDarkness * 0.4);
 
     // Apply Breaking Cracks Overlay
     if (uBreakProgress > 0.05) {
@@ -133,6 +133,6 @@ void main()
         fragColor.rgb = mix(fragColor.rgb, uFogColor * (1.0 - clamp(uSkyDarkness, 0.0, 1.0) * 0.5), fogFactor);
     }
     
-    // Gamma correction
+    // Gamma correction (improved)
     fragColor.rgb = pow(fragColor.rgb, vec3(1.0/2.2));
 }

@@ -198,6 +198,7 @@ public class Renderer {
         // Lighting uniforms
         shaderProgram.createUniform("lightDirection");
         shaderProgram.createUniform("lightColor");
+        shaderProgram.createUniform("cameraPos");
         shaderProgram.createUniform("ambientStrength");
         shaderProgram.createUniform("uBreakProgress");
         shaderProgram.createUniform("uAlpha");
@@ -370,6 +371,7 @@ public class Renderer {
         // Lighting
         shaderProgram.setUniform("lightDirection", timeSystem.getSunDirection());
         shaderProgram.setUniform("lightColor", timeSystem.getLightColor());
+        shaderProgram.setUniform("cameraPos", camera.getEyePosition());
         shaderProgram.setUniform("ambientStrength", timeSystem.getAmbientStrength());
 
         // Weather
